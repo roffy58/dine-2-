@@ -32,16 +32,15 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
     try {
       // 🆕 Backend schema ke hisaab se payload
-      const newOrder = {
-        table_no: data.tableNumber,
-        customer_name: data.customerName,
-        items: cart, // Cart items pass kar rahe hain
-        total: Number(getTotalPrice()),
-        notes: data.notes || "",
-        paymentType: paymentType,
-        paymentStatus: paymentType === "card" ? "paid" : "pending",
-      };
-
+const newOrder = {
+  table_no: data.tableNumber,
+  customer_name: data.customerName,
+  items: cart,
+  total: getTotalPrice().toString(), // 🆕 .toString() add kar diya
+  notes: data.notes || "",
+  paymentType: paymentType,
+  paymentStatus: paymentType === "card" ? "paid" : "pending",
+};
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
