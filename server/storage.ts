@@ -1,14 +1,13 @@
-import { type User, type InsertUser, type Order } from "@shared/schema";
+// Imports mein InsertOrder add kar lo
+import { type User, type InsertUser, type Order, type InsertOrder } from "@shared/schema";
 import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promise<Order>;
+  // 🆕 InsertOrder ka use karo yahan
+  createOrder(order: InsertOrder): Promise<Order>;
   getOrders(): Promise<Order[]>;
 }
 
@@ -21,30 +20,18 @@ export class MemStorage implements IStorage {
     this.orders = new Map();
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
+  // ... (getUser aur createUser methods wahi rahenge)
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
-  }
-
-  async createOrder(orderData: Omit<Order, 'id' | 'createdAt'>): Promise<Order> {
+  // 🆕 createOrder method ko update karo
+  async createOrder(orderData: InsertOrder): Promise<Order> {
     const id = randomUUID();
     const order: Order = {
       ...orderData,
       id,
-      createdAt: new Date().toISOString(),
-    };
+      createdAt: new Date(), // Date object chahiye hoga schema ke hisaab se
+      paymentStatus: orderData.paymentStatus || "pending", // Default handle kiya
+    } as Order;
+    
     this.orders.set(id, order);
     return order;
   }
