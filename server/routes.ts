@@ -1,13 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertOrderSchema } from "@shared/schema"; // 🆕 orderSchema ki jagah insertOrderSchema use karo
+import { insertOrderSchema } from "../shared/schema"; 
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/orders", async (req, res) => {
     try {
-      // 🆕 Yahan insertOrderSchema use karenge jo payment fields allow karega
-      const validatedOrder = insertOrderSchema.parse(req.body); 
+      const validatedOrder = insertOrderSchema.parse(req.body);
       const order = await storage.createOrder(validatedOrder);
       res.status(201).json({ success: true, order });
     } catch (error) {
