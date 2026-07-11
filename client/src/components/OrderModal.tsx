@@ -7,6 +7,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
+import { loadStripe } from "@stripe/stripe-js";
+
+// Stripe ki public key yahan ayegi (Abhi placeholder)
+const stripePromise = loadStripe("pk_test_YOUR_PUBLISHABLE_KEY");
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -18,18 +22,31 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
   const [showTimer, setShowTimer] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes timer
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
 
-  // Timer Effect
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (showTimer && timeLeft > 0) {
-      timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    } else if (timeLeft === 0) {
-      setShowTimer(false);
+    let interval: NodeJS.Timeout;
+    if (isWaiting && orderId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/orders/${orderId}`);
+          const data = await res.json();
+          // Check karo agar status confirmed ho gaya
+          if (data.status === "confirmed") {
+            toast.success("✅ Payment confirmed by waiter!");
+            setIsWaiting(false);
+            clearCart();
+            onSuccess();
+            onClose();
+          }
+        } catch (e) {
+          console.error("Polling error", e);
+        }
+      }, 3000);
     }
-    return () => clearInterval(timer);
-  }, [showTimer, timeLeft]);
+    return () => clearInterval(interval);
+  }, [isWaiting, orderId]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -47,10 +64,11 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         table_no: data.tableNumber,
         customer_name: data.customerName,
         items: cart,
-        total: getTotalPrice().toString(), // Changed to string for schema compatibility
+        total: getTotalPrice().toString(),
         notes: data.notes || "",
         paymentType: paymentType,
         paymentStatus: paymentType === "card" ? "paid" : "pending",
+        status: "pending",
       };
 
       const res = await fetch("/api/orders", {
@@ -59,15 +77,24 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         body: JSON.stringify(newOrder),
       });
 
+      const responseData = await res.json();
       if (!res.ok) throw new Error("Failed to place order");
 
       if (paymentType === "cash") {
+        setOrderId(responseData.order.id);
         setShowTimer(true);
+        setIsWaiting(true);
       } else {
-        toast.success("✅ Payment initiated!");
-        clearCart();
-        onSuccess();
-        onClose();
+        // Stripe Payment Flow
+        const stripe = await stripePromise;
+        const sessionRes = await fetch("/api/create-checkout-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: cart, total: getTotalPrice() }),
+        });
+        
+        const { sessionId } = await sessionRes.json();
+        await stripe?.redirectToCheckout({ sessionId });
       }
     } catch (error) {
       toast.error("❌ Something went wrong.");
@@ -79,17 +106,18 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
       <div className="bg-card border p-6 rounded-2xl w-full max-w-md shadow-xl">
-        {showTimer ? (
+        {isWaiting ? (
           <div className="text-center py-6">
-            <h2 className="text-2xl font-bold text-primary">
-              Pay Cash: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-            </h2>
-            <p className="mt-2 text-muted-foreground">Please pay the amount to the waiter.</p>
-            <Button onClick={() => { clearCart(); onClose(); onSuccess(); }} className="w-full mt-4">Close</Button>
+            <h2 className="text-2xl font-bold text-primary">Waiting for Confirmation</h2>
+            <p className="mt-2 text-muted-foreground">Please wait while the waiter confirms your cash payment.</p>
+            <div className="mt-4 animate-pulse text-sm font-semibold">Checking status...</div>
           </div>
         ) : (
           <>
-            <h2 className="text-xl font-bold mb-4">Complete Order</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Complete Order</h2>
+              <Button variant="ghost" onClick={onClose} size="sm">✕</Button>
+            </div>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <div className="flex gap-2">
