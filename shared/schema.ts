@@ -27,6 +27,8 @@ export const orderItemSchema = z.object({
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
   createdAt: true,
+}).extend({
+  total: z.string(), // Force total to be a string
 });
 
 export type Order = typeof orders.$inferSelect;
