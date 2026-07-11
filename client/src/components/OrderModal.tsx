@@ -9,7 +9,7 @@ import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
 import { loadStripe } from "@stripe/stripe-js";
 
-// Stripe ki public key yahan ayegi (Abhi placeholder)
+// Stripe ki public key - Prod mein ise env variable se load karna
 const stripePromise = loadStripe("pk_test_YOUR_PUBLISHABLE_KEY");
 
 interface OrderModalProps {
@@ -21,7 +21,6 @@ interface OrderModalProps {
 export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
-  const [showTimer, setShowTimer] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
 
@@ -32,7 +31,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         try {
           const res = await fetch(`/api/orders/${orderId}`);
           const data = await res.json();
-          // Check karo agar status confirmed ho gaya
           if (data.status === "confirmed") {
             toast.success("✅ Payment confirmed by waiter!");
             setIsWaiting(false);
@@ -82,8 +80,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
       if (paymentType === "cash") {
         setOrderId(responseData.order.id);
-        setShowTimer(true);
-        setIsWaiting(true);
+        setIsWaiting(true); // Window lock
       } else {
         // Stripe Payment Flow
         const stripe = await stripePromise;
@@ -93,11 +90,17 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           body: JSON.stringify({ items: cart, total: getTotalPrice() }),
         });
         
-        const { sessionId } = await sessionRes.json();
-        await stripe?.redirectToCheckout({ sessionId });
+        const sessionData = await sessionRes.json();
+        
+        if (sessionData.sessionId) {
+          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        } else {
+          throw new Error("Failed to initiate payment");
+        }
       }
     } catch (error) {
       toast.error("❌ Something went wrong.");
+      console.error(error);
     }
   };
 
