@@ -1,42 +1,33 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, jsonb, timestamp, serial, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export const orders = pgTable("orders", {
+  id: serial("id").primaryKey(),
+  table_no: text("table_no").notNull(),
+  customer_name: text("customer_name").notNull(),
+  items: jsonb("items").notNull(),
+  total: numeric("total").notNull(),
+  notes: text("notes"),
+  paymentType: text("payment_type").notNull().default("card"),
+  paymentStatus: text("payment_status").notNull().default("pending"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
-
-
-// 🧩 Order Item Schema
 export const orderItemSchema = z.object({
-  name: z.string(),                    // dish name
-  qty: z.number().int().positive(),    // quantity (already correct)
-  price: z.number().positive(),        // single item price
-  total: z.number().positive().optional(), // 🆕 total per item (price * qty)
+  name: z.string(),
+  qty: z.number().int().positive(),
+  price: z.number().positive(),
+  total: z.number().positive().optional(),
 });
 
-// 🧾 Order Schema
-export const orderSchema = z.object({
-  id: z.string().optional(),
-  table_no: z.string(),
-  customer_name: z.string(),
-  items: z.array(orderItemSchema),     // list of ordered items
-  total: z.number().positive(),        // total bill
-  notes: z.string().optional(),
-  createdAt: z.string().optional(),
+// Ye raha aapka robust schema
+export const insertOrderSchema = createInsertSchema(orders).omit({
+  id: true,
+  createdAt: true,
 });
 
-// 🧠 Types for TypeScript
-export type Order = z.infer<typeof orderSchema>;
-export type OrderItem = z.infer<typeof orderItemSchema>;
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
