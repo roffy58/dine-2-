@@ -6,20 +6,21 @@ import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CategoryFilter } from "@/components/CategoryFilter";
-import { CheckCircleIcon, PlusIcon, MinusIcon } from "@heroicons/react/24/solid";
-import {
-  SparklesIcon,
-  CakeIcon,
-  CubeIcon,
-  BeakerIcon,
-} from "@heroicons/react/24/outline";
+import { CategoryFilter } from "../components/CategoryFilter";
+import { CheckCircleIcon, PlusIcon, MinusIcon, SparklesIcon } from "@heroicons/react/24/solid";
+import { CakeIcon, CubeIcon, BeakerIcon } from "@heroicons/react/24/outline";
+
+// 1. Recommendation Logic
+const getRecommendation = () => {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 11) return { title: "☀️ Morning Fresh", desc: "Start your day with our breakfast specials!" };
+  if (hour >= 11 && hour < 16) return { title: "🍛 Lunch Special", desc: "Enjoy our signature thali, hot and fresh." };
+  if (hour >= 16 && hour < 19) return { title: "☕ Evening Snacks", desc: "Perfect time for pakoras and tea." };
+  return { title: "🌙 Dinner Special", desc: "Wrap up your day with our delicious dinner combos." };
+};
 
 const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  Sabji: SparklesIcon,
-  Roti: CubeIcon,
-  Beverages: BeakerIcon,
-  Desserts: CakeIcon,
+  Sabji: SparklesIcon, Roti: CubeIcon, Beverages: BeakerIcon, Desserts: CakeIcon,
 };
 
 const categoryBackgrounds: Record<string, string> = {
@@ -33,97 +34,38 @@ export default function HomePage() {
   const [, setLocation] = useLocation();
   const { searchQuery, selectedCategory } = useSearch();
   const { cart, addToCart, updateQuantity } = useCart();
+  const rec = getRecommendation();
 
   const searchedMenu = searchAllCategories(menu, searchQuery);
-  const filteredMenu = selectedCategory
-    ? { [selectedCategory]: searchedMenu[selectedCategory] || [] }
-    : searchedMenu;
+  const filteredMenu = selectedCategory ? { [selectedCategory]: searchedMenu[selectedCategory] || [] } : searchedMenu;
   const hasSearchResults = Object.keys(filteredMenu).length > 0;
   const isSearching = searchQuery.trim().length > 0;
 
-  const getItemQuantity = (itemId: string) => {
-    return cart.find((item) => item.id === itemId)?.quantity || 0;
+  const getItemQuantity = (itemId: string) => cart.find((item) => item.id === itemId)?.quantity || 0;
+
+  const getImagePath = (imageName?: string) => {
+    if (!imageName) return null;
+    try { return new URL(`../../../attached_assets/stock_images/${imageName}`, import.meta.url).href; }
+    catch { return null; }
   };
 
   const renderMenuItem = (item: MenuItem) => {
     const quantity = getItemQuantity(item.id);
     const isSelected = quantity > 0;
-
-    const getImagePath = (imageName?: string) => {
-      if (!imageName) return null;
-      try {
-        return new URL(`../../../attached_assets/stock_images/${imageName}`, import.meta.url).href;
-      } catch {
-        return null;
-      }
-    };
-
     return (
-      <Card
-        key={item.id}
-        className={`overflow-hidden transition-all duration-200 ${
-          isSelected ? "ring-2 ring-primary shadow-lg scale-105" : ""
-        }`}
-        data-testid={`item-${item.id}`}
-      >
-        {item.image && (
-          <div className="w-full h-48 overflow-hidden">
-            <img 
-              src={getImagePath(item.image) || ''} 
-              alt={item.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
+      <Card key={item.id} className={`overflow-hidden transition-all duration-200 ${isSelected ? "ring-2 ring-primary shadow-lg scale-105" : ""}`}>
+        {item.image && <div className="w-full h-48 overflow-hidden"><img src={getImagePath(item.image) || ''} alt={item.name} className="w-full h-full object-cover" /></div>}
         <div className="p-4 space-y-3">
-          <div>
-            <h3 className="text-lg md:text-xl font-medium text-foreground mb-1">
-              {item.name}
-            </h3>
-            {item.description && (
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {item.description}
-              </p>
-            )}
-          </div>
-
+          <h3 className="text-lg font-medium text-foreground">{item.name}</h3>
           <div className="flex items-center justify-between pt-2">
-            <span className="text-base md:text-lg font-semibold text-foreground">
-              ₹{item.price}
-            </span>
-
+            <span className="font-semibold text-foreground">₹{item.price}</span>
             {!isSelected ? (
-              <Button
-                onClick={() => addToCart(item)}
-                size="sm"
-                variant="default"
-                data-testid={`button-add-${item.id}`}
-              >
-                <PlusIcon className="h-4 w-4 mr-1" />
-                Add
-              </Button>
+              <Button onClick={() => addToCart(item)} size="sm"><PlusIcon className="h-4 w-4 mr-1" /> Add</Button>
             ) : (
-              <div className="flex items-center gap-2">
-                <CheckCircleIcon className="h-5 w-5 text-primary" />
-                <div className="flex items-center gap-1 bg-primary/10 rounded-full p-1">
-                  <button
-                    onClick={() => updateQuantity(item.id, quantity - 1)}
-                    className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover-elevate active-elevate-2"
-                    data-testid={`button-decrease-${item.id}`}
-                  >
-                    <MinusIcon className="h-4 w-4" />
-                  </button>
-                  <span className="w-8 text-center font-semibold text-foreground" data-testid={`quantity-${item.id}`}>
-                    {quantity}
-                  </span>
-                  <button
-                    onClick={() => updateQuantity(item.id, quantity + 1)}
-                    className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover-elevate active-elevate-2"
-                    data-testid={`button-increase-${item.id}`}
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 bg-primary/10 rounded-full p-1">
+                <button onClick={() => updateQuantity(item.id, quantity - 1)} className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><MinusIcon className="h-4 w-4" /></button>
+                <span className="w-8 text-center font-bold text-foreground">{quantity}</span>
+                <button onClick={() => updateQuantity(item.id, quantity + 1)} className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><PlusIcon className="h-4 w-4" /></button>
               </div>
             )}
           </div>
@@ -134,110 +76,46 @@ export default function HomePage() {
 
   if (isSearching) {
     return (
-      <div className="min-h-screen">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
-          <div className="mb-6 space-y-4">
-            <div>
-              <h2 className="text-2xl md:text-3xl font-bold font-serif text-foreground mb-2">
-                Search Results
-              </h2>
-              <p className="text-muted-foreground text-sm md:text-base">
-                {hasSearchResults
-                  ? `Found items in ${Object.keys(filteredMenu).length} ${selectedCategory ? 'category' : 'categories'}`
-                  : "No items found matching your search"}
-              </p>
-            </div>
-            <CategoryFilter />
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <h2 className="text-3xl font-bold font-serif mb-4">Search Results</h2>
+        <CategoryFilter />
+        {hasSearchResults ? Object.entries(filteredMenu).map(([cat, items]) => (
+          <div key={cat} className="mt-6">
+            <h3 className="text-xl font-semibold mb-4">{cat}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{items.map(renderMenuItem)}</div>
           </div>
-
-          {hasSearchResults ? (
-            <div className="space-y-8 pb-24">
-              {Object.entries(filteredMenu).map(([category, items]) => (
-                <div key={category}>
-                  <div className="flex items-center gap-3 mb-4">
-                    <h3 className="text-xl md:text-2xl font-semibold font-serif text-foreground">
-                      {category}
-                    </h3>
-                    <Badge variant="secondary" data-testid={`badge-${category.toLowerCase()}`}>
-                      {items.length} items
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                    {items.map(renderMenuItem)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12" data-testid="no-results">
-              <p className="text-muted-foreground">
-                Try searching with different keywords
-              </p>
-            </div>
-          )}
-        </div>
+        )) : <p className="text-center py-12">No items found.</p>}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
-        <div className="text-center mb-8 md:mb-12 bg-card/50 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-border">
-          <h2 className="text-4xl md:text-5xl font-bold font-serif text-foreground mb-3 drop-shadow-sm">
-            Our Menu
-          </h2>
-          <p className="text-foreground/80 text-base md:text-lg font-medium">
-            Select a category to explore our delicious offerings
-          </p>
+    <div className="min-h-screen bg-background pb-20">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        
+        {/* New Stylish Banner */}
+        <div className="mb-10 p-6 bg-gradient-to-r from-primary to-primary/80 rounded-3xl shadow-xl text-white relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 scale-150 transition-transform group-hover:scale-125">
+             <SparklesIcon className="h-32 w-32" />
+          </div>
+          <h2 className="text-2xl font-bold font-serif mb-1">{rec.title}</h2>
+          <p className="opacity-90 font-medium">{rec.desc}</p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-24">
-          {Object.keys(menu).map((category) => {
-            const Icon = categoryIcons[category] || SparklesIcon;
-            const itemCount = menu[category].length;
-            const backgroundImage = categoryBackgrounds[category];
-            const getImagePath = (imageName?: string) => {
-              if (!imageName) return null;
-              try {
-                return new URL(`../../../attached_assets/stock_images/${imageName}`, import.meta.url).href;
-              } catch {
-                return null;
-              }
-            };
-
-            return (
-              <button
-                key={category}
-                onClick={() => setLocation(`/category/${category}`)}
-                className="group relative aspect-square rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-                data-testid={`category-${category.toLowerCase()}`}
-              >
-                <img 
-                  src={getImagePath(backgroundImage) || ''} 
-                  alt={category}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/30 group-hover:from-black/60 group-hover:via-black/30 group-hover:to-black/20 transition-all duration-300" />
-                
-                <div className="relative h-full flex flex-col items-center justify-center p-6 text-center">
-                  <h3 className="text-2xl md:text-3xl font-extrabold text-white mb-2 drop-shadow-[0_4px_12px_rgba(0,0,0,1)] tracking-wide">
-                    {category}
-                  </h3>
-                  
-                  <span className="text-base md:text-lg text-white font-bold drop-shadow-[0_2px_8px_rgba(0,0,0,1)] bg-black/30 px-4 py-1 rounded-full backdrop-blur-sm">
-                    {itemCount} items
-                  </span>
-                </div>
-
-                <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-black px-3 py-1 rounded-full shadow-lg">
-                  <span className="text-sm font-bold">
-                    {itemCount}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+        <h2 className="text-3xl font-bold font-serif mb-6 text-foreground">Explore Categories</h2>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {Object.keys(menu).map((category) => (
+            <button key={category} onClick={() => setLocation(`/category/${category}`)} 
+              className="group relative aspect-[3/4] rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2">
+              <img src={getImagePath(categoryBackgrounds[category]) || ''} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={category} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+              <div className="absolute bottom-0 left-0 p-5 w-full">
+                <h3 className="text-2xl font-bold text-white mb-1">{category}</h3>
+                <Badge className="bg-white/20 text-white backdrop-blur-md border-0">{menu[category].length} Items</Badge>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
