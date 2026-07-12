@@ -9,7 +9,7 @@ import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
 import { loadStripe } from "@stripe/stripe-js";
 
-// Stripe Promise function (Lazy load ke liye)
+// Stripe Promise function
 const getStripe = () => loadStripe("pk_test_YOUR_PUBLISHABLE_KEY");
 
 interface OrderModalProps {
@@ -82,7 +82,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         setOrderId(responseData.order.id);
         setIsWaiting(true);
       } else {
-        // Stripe Payment Flow
+        // Stripe Payment Flow (Cleaned)
         const sessionRes = await fetch("/api/create-checkout-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -91,16 +91,18 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         
         const sessionData = await sessionRes.json();
         
-        if (sessionData.sessionId) {
+        if (sessionRes.ok && sessionData.sessionId) {
           const stripe = await getStripe();
-          // Stripe ki official window trigger hogi
-          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+          const { error } = await stripe!.redirectToCheckout({ sessionId: sessionData.sessionId });
+          if (error) {
+            throw new Error(error.message);
+          }
         } else {
-          throw new Error("Failed to initiate payment session");
+          throw new Error(sessionData.message || "Failed to initiate payment");
         }
       }
     } catch (error) {
-      toast.error("❌ Something went wrong.");
+      toast.error(error instanceof Error ? error.message : "❌ Something went wrong.");
       console.error(error);
     }
   };
