@@ -22,22 +22,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
   const [isWaiting, setIsWaiting] = useState(false);
-  const [timer, setTimer] = useState(60); // Naya timer state
   const [showDemoPayment, setShowDemoPayment] = useState(false);
-
-  // Cash payment ke liye Timer logic
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isWaiting && timer > 0) {
-      interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
-    } else if (isWaiting && timer === 0) {
-      toast.success("Order confirmed!");
-      clearCart();
-      onSuccess();
-      onClose();
-    }
-    return () => clearInterval(interval);
-  }, [isWaiting, timer, clearCart, onSuccess, onClose]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -48,6 +33,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
+      // FIX: Yahan data ko explicitly string mein convert kiya taaki Zod validation pass ho
       const newOrder = {
         table_no: String(data.tableNumber),
         customer_name: String(data.customerName),
@@ -77,7 +63,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           body: JSON.stringify({ items: cart, total: getTotalPrice() }),
         });
         const sessionData = await sessionRes.json();
-        
+
         if (sessionData.sessionId) {
           const stripe = await getStripe();
           await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
@@ -104,11 +90,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
           </div>
         ) : isWaiting ? (
-          <div className="text-center py-6 space-y-4">
-            <h2 className="text-2xl font-bold text-red-600">Give cash to the owner</h2>
-            <p className="text-gray-600">Complete payment within:</p>
-            <div className="text-4xl font-mono font-bold text-black">{timer}s</div>
-          </div>
+          <div className="text-center py-6 text-black font-bold">Waiting for Waiter...</div>
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
