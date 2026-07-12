@@ -1,20 +1,16 @@
+import { useState, useEffect } from "react";
 import { useCart } from "../contexts/CartContext";
-import { XMarkIcon, TrashIcon, PlusIcon, MinusIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
+import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
+import { loadStripe } from "@stripe/stripe-js";
+
+const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY || "pk_test_dummy";
+const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -23,197 +19,91 @@ interface OrderModalProps {
 }
 
 export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
-  const { cart, updateQuantity, removeFromCart, getTotalPrice, clearCart } = useCart();
+  const { cart, getTotalPrice, clearCart } = useCart();
+  const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [showDemoPayment, setShowDemoPayment] = useState(false);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
-    defaultValues: {
-      tableNumber: "",
-      customerName: "",
-      notes: "",
-    },
+    defaultValues: { tableNumber: "", customerName: "", notes: "" },
   });
 
-  const total = getTotalPrice();
-
   const onSubmit = async (data: OrderFormData) => {
+    if (!paymentType) { toast.error("Select a payment method!"); return; }
+
     try {
-      if (cart.length === 0) {
-        toast.error("Cart is empty!");
-        return;
-      }
-
+      // FIX: Yahan data ko explicitly string mein convert kiya taaki Zod validation pass ho
       const newOrder = {
-  restaurant_id: "res-1", // 👈 Add this line
-  table_no: data.tableNumber,
-  customer_name: data.customerName,
-  notes: data.notes || "",
-  status: "pending",
-  items: cart.map((item) => ({
-    name: item.name,
-    qty: item.quantity,
-    price: item.price,
-  })),
-  total,
-  time: new Date().toISOString(),
-};
+        table_no: String(data.tableNumber),
+        customer_name: String(data.customerName),
+        items: cart,
+        total: getTotalPrice().toString(),
+        notes: data.notes || "",
+        paymentType: paymentType,
+        paymentStatus: paymentType === "card" ? "paid" : "pending",
+        status: "pending",
+      };
 
-      // ✅ Send to backend
-      const res = await fetch("https://nevolt-backend.onrender.com/api/orders", {
+      const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newOrder),
       });
 
-      if (!res.ok) throw new Error("Failed to place order");
+      const responseData = await res.json();
+      if (!res.ok) throw new Error(responseData.message || "Order failed");
 
-      toast.success("✅ Order placed successfully!");
-
-      clearCart();
-      form.reset();
-      onSuccess();
-      onClose();
-    } catch (error) {
-      console.error("Order error:", error);
-      toast.error("❌ Something went wrong. Please try again.");
+      if (paymentType === "cash") {
+        setIsWaiting(true);
+      } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
+        const sessionRes = await fetch("/api/create-checkout-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: cart, total: getTotalPrice() }),
+        });
+        const sessionData = await sessionRes.json();
+        
+        if (sessionData.sessionId) {
+          const stripe = await getStripe();
+          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        }
+      } else {
+        setShowDemoPayment(true);
+      }
+    } catch (e) { 
+      toast.error(e instanceof Error ? e.message : "Something went wrong"); 
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      <div
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative bg-card border border-card-border rounded-t-3xl md:rounded-2xl w-full md:max-w-2xl max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom-8 md:zoom-in-95 duration-300">
-        <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-card-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Your Order</h2>
-          <button onClick={onClose} className="h-9 w-9 rounded-full hover-elevate flex items-center justify-center">
-            <XMarkIcon className="h-6 w-6" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto max-h-[calc(90vh-180px)] px-6 py-6">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
+        {showDemoPayment ? (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold">Demo Payment</h2>
+            <Input placeholder="Card Number" />
+            <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
+            <Button className="w-full" onClick={() => { toast.success("Payment Successful!"); clearCart(); onSuccess(); onClose(); }}>Pay Now</Button>
+            <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
+          </div>
+        ) : isWaiting ? (
+          <div className="text-center py-6 text-black font-bold">Waiting for Waiter...</div>
+        ) : (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              {/* Customer Details */}
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="tableNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Table Number <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Enter table number"
-                          className="h-12"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="customerName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Your Name <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="text"
-                          placeholder="Enter your name"
-                          className="h-12"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Special Requests</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Any special requests or dietary requirements..."
-                          rows={3}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="flex gap-2">
+                <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card</Button>
+                <Button type="button" variant={paymentType === "cash" ? "default" : "outline"} onClick={() => setPaymentType("cash")} className="flex-1">Cash</Button>
               </div>
-
-              {/* Cart Summary */}
-              <div className="border-t border-border pt-6">
-                <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
-                <div className="space-y-3">
-                  {cart.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{item.name}</p>
-                        <p className="text-sm text-muted-foreground">₹{item.price} each</p>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex items-center gap-1 bg-background rounded-full p-1">
-                          <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                            <MinusIcon className="h-4 w-4" />
-                          </button>
-                          <span className="w-8 text-center font-semibold">{item.quantity}</span>
-                          <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                            <PlusIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <button type="button" onClick={() => removeFromCart(item.id)} className="h-9 w-9 rounded-full hover:bg-destructive/10 flex items-center justify-center">
-                          <TrashIcon className="h-5 w-5 text-destructive" />
-                        </button>
-
-                        <span className="text-sm font-semibold w-16 text-right">
-                          ₹{item.price * item.quantity}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-bold">Total</span>
-                    <span className="text-2xl font-bold text-primary">₹{total}</span>
-                  </div>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full"
-                disabled={form.formState.isSubmitting || cart.length === 0}
-              >
-                {form.formState.isSubmitting ? "Placing Order..." : "Confirm Order"}
-              </Button>
+              <FormField control={form.control} name="tableNumber" render={({field}) => <FormItem><FormLabel>Table No</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
+              <FormField control={form.control} name="customerName" render={({field}) => <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
+              <Button type="submit" className="w-full">Confirm</Button>
             </form>
           </Form>
-        </div>
+        )}
       </div>
     </div>
   );
