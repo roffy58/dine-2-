@@ -7,10 +7,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
-import { loadStripe } from "@stripe/stripe-js";
+import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
-// Stripe ki public key - Prod mein ise env variable se load karna
-const stripePromise = loadStripe("pk_test_YOUR_PUBLISHABLE_KEY");
+// Stripe Promise function (Lazy load ke liye)
+const getStripe = () => loadStripe("pk_test_YOUR_PUBLISHABLE_KEY");
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -80,10 +80,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
       if (paymentType === "cash") {
         setOrderId(responseData.order.id);
-        setIsWaiting(true); // Window lock
+        setIsWaiting(true);
       } else {
-        // Stripe Payment Flow
-        const stripe = await stripePromise;
         const sessionRes = await fetch("/api/create-checkout-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -92,7 +90,13 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         
         const sessionData = await sessionRes.json();
         
-        if (sessionData.sessionId) {
+        if (sessionData.sessionId === "mock_session_id_for_testing") {
+          toast.success("✅ Payment simulation successful (No Stripe key)");
+          clearCart();
+          onSuccess();
+          onClose();
+        } else if (sessionData.sessionId) {
+          const stripe = await getStripe();
           await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
         } else {
           throw new Error("Failed to initiate payment");
