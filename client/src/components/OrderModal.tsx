@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,24 +33,47 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
-      const newOrder = { ...data, items: cart, total: getTotalPrice(), paymentType, status: "pending" };
+      // FIX: Yahan data ko explicitly string mein convert kiya taaki Zod validation pass ho
+      const newOrder = {
+        table_no: String(data.tableNumber),
+        customer_name: String(data.customerName),
+        items: cart,
+        total: getTotalPrice().toString(),
+        notes: data.notes || "",
+        paymentType: paymentType,
+        paymentStatus: paymentType === "card" ? "paid" : "pending",
+        status: "pending",
+      };
+
       const res = await fetch("/api/orders", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newOrder),
       });
 
-      if (!res.ok) throw new Error("Order failed");
+      const responseData = await res.json();
+      if (!res.ok) throw new Error(responseData.message || "Order failed");
 
       if (paymentType === "cash") {
         setIsWaiting(true);
       } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
-        const sessionData = await (await fetch("/api/create-checkout-session", { method: "POST", body: JSON.stringify({ items: cart }), headers: {"Content-Type": "application/json"} })).json();
-        const stripe = await getStripe();
-        await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        const sessionRes = await fetch("/api/create-checkout-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: cart, total: getTotalPrice() }),
+        });
+        const sessionData = await sessionRes.json();
+        
+        if (sessionData.sessionId) {
+          const stripe = await getStripe();
+          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        }
       } else {
         setShowDemoPayment(true);
       }
-    } catch (e) { toast.error("Something went wrong"); }
+    } catch (e) { 
+      toast.error(e instanceof Error ? e.message : "Something went wrong"); 
+    }
   };
 
   if (!isOpen) return null;
