@@ -22,10 +22,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
   const [isWaiting, setIsWaiting] = useState(false);
-  const [timer, setTimer] = useState(60); 
+  const [timer, setTimer] = useState(60);
   const [showDemoPayment, setShowDemoPayment] = useState(false);
 
-  // FIX: Timer khatam hone par order confirm nahi, fail hona chahiye
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isWaiting && timer > 0) {
@@ -33,7 +32,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     } else if (isWaiting && timer === 0) {
       setIsWaiting(false);
       toast.error("Payment Timed Out! Please try again.");
-      onClose(); // Modal band ho jayega
+      onClose();
     }
     return () => clearInterval(interval);
   }, [isWaiting, timer, onClose]);
@@ -47,20 +46,22 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
+      // UPDATED: Backend requirement ke hisaab se id aur restaurant_id add kiya
       const newOrder = {
+        id: Date.now().toString(),
+        restaurant_id: "dine-2",
         table_no: String(data.tableNumber),
         customer_name: String(data.customerName),
         items: cart,
         total: getTotalPrice().toString(),
         notes: data.notes || "",
         paymentType: paymentType,
-        paymentStatus: "pending", // Status pending rakha hai taaki owner approve kare
+        paymentStatus: "pending",
         status: "pending",
       };
 
-      // FIX: Yahan URL check karo, agar Render par backend alag hai, 
-      // toh https://nevolt-backend.onrender.com/api/orders use karna padega
-      const res = await fetch("/api/orders", {
+      // UPDATED: Full URL use kiya taaki nevolt-backend tak request pahunche
+      const res = await fetch("https://nevolt-backend.onrender.com/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newOrder),
@@ -70,7 +71,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       if (!res.ok) throw new Error(responseData.message || "Order failed");
 
       if (paymentType === "cash") {
-        setIsWaiting(true); // Sirf timer dikhao, order abhi pending hai
+        setIsWaiting(true);
       } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
         const sessionRes = await fetch("/api/create-checkout-session", {
           method: "POST",
@@ -86,8 +87,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       } else {
         setShowDemoPayment(true);
       }
-    } catch (e) { 
-      toast.error(e instanceof Error ? e.message : "Something went wrong"); 
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong");
     }
   };
 
