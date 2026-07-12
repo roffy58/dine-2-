@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 
 // Stripe Promise function (Lazy load ke liye)
 const getStripe = () => loadStripe("pk_test_YOUR_PUBLISHABLE_KEY");
@@ -82,6 +82,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         setOrderId(responseData.order.id);
         setIsWaiting(true);
       } else {
+        // Stripe Payment Flow
         const sessionRes = await fetch("/api/create-checkout-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -90,16 +91,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         
         const sessionData = await sessionRes.json();
         
-        if (sessionData.sessionId === "mock_session_id_for_testing") {
-          toast.success("✅ Payment simulation successful (No Stripe key)");
-          clearCart();
-          onSuccess();
-          onClose();
-        } else if (sessionData.sessionId) {
+        if (sessionData.sessionId) {
           const stripe = await getStripe();
+          // Stripe ki official window trigger hogi
           await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
         } else {
-          throw new Error("Failed to initiate payment");
+          throw new Error("Failed to initiate payment session");
         }
       }
     } catch (error) {
