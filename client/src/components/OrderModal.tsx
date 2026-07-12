@@ -9,7 +9,6 @@ import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
 import { loadStripe } from "@stripe/stripe-js";
 
-// Yahan apni Public Key set karo. Demo ke liye 'pk_test_dummy' rakha hai.
 const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY || "pk_test_dummy";
 const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
 
@@ -23,29 +22,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
   const [isWaiting, setIsWaiting] = useState(false);
-  const [orderId, setOrderId] = useState<string | null>(null);
-  const [showDemoPayment, setShowDemoPayment] = useState(false); // Demo UI State
-
-  // ... (useEffect same rahega)
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isWaiting && orderId) {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/orders/${orderId}`);
-          const data = await res.json();
-          if (data.status === "confirmed") {
-            toast.success("✅ Payment confirmed by waiter!");
-            setIsWaiting(false);
-            clearCart();
-            onSuccess();
-            onClose();
-          }
-        } catch (e) { console.error("Polling error", e); }
-      }, 3000);
-    }
-    return () => clearInterval(interval);
-  }, [isWaiting, orderId]);
+  const [showDemoPayment, setShowDemoPayment] = useState(false);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -53,66 +30,56 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   });
 
   const onSubmit = async (data: OrderFormData) => {
-    if (!paymentType) { toast.error("Please select a payment method!"); return; }
+    if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
-      const newOrder = {
-        table_no: data.tableNumber, customer_name: data.customerName, items: cart,
-        total: getTotalPrice().toString(), notes: data.notes || "",
-        paymentType: paymentType, paymentStatus: paymentType === "card" ? "paid" : "pending",
-        status: "pending",
-      };
-
+      const newOrder = { ...data, items: cart, total: getTotalPrice(), paymentType, status: "pending" };
       const res = await fetch("/api/orders", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newOrder),
       });
 
-      const responseData = await res.json();
-      if (!res.ok) throw new Error("Failed to place order");
+      if (!res.ok) throw new Error("Order failed");
 
       if (paymentType === "cash") {
-        setOrderId(responseData.order.id);
         setIsWaiting(true);
+      } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
+        const sessionData = await (await fetch("/api/create-checkout-session", { method: "POST", body: JSON.stringify({ items: cart }), headers: {"Content-Type": "application/json"} })).json();
+        const stripe = await getStripe();
+        await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
       } else {
-        // --- SMART PAYMENT LOGIC ---
-        if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
-          const sessionRes = await fetch("/api/create-checkout-session", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items: cart, total: getTotalPrice() }),
-          });
-          const sessionData = await sessionRes.json();
-          if (sessionData.sessionId) {
-            const stripe = await getStripe();
-            await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
-          }
-        } else {
-          // Key nahi hai, toh Demo UI dikhao
-          setShowDemoPayment(true);
-        }
+        setShowDemoPayment(true);
       }
-    } catch (error) { toast.error("❌ Something went wrong."); console.error(error); }
+    } catch (e) { toast.error("Something went wrong"); }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
-      <div className="bg-card border p-6 rounded-2xl w-full max-w-md shadow-xl">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
         {showDemoPayment ? (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold">Secure Card Payment (Demo)</h2>
+            <h2 className="text-xl font-bold">Demo Payment</h2>
             <Input placeholder="Card Number" />
             <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
-            <Button className="w-full" onClick={() => { toast.success("✅ Payment Successful!"); clearCart(); onSuccess(); onClose(); }}>Pay Now</Button>
+            <Button className="w-full" onClick={() => { toast.success("Payment Successful!"); clearCart(); onSuccess(); onClose(); }}>Pay Now</Button>
             <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
           </div>
         ) : isWaiting ? (
-          // ... (Waiting UI same)
-          <div className="text-center py-6"> <h2 className="text-2xl font-bold text-primary">Waiting for Confirmation</h2> </div>
+          <div className="text-center py-6 text-black font-bold">Waiting for Waiter...</div>
         ) : (
-          // ... (Original Form UI same)
-          <Form {...form}><form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4"> {/* ... */}</form></Form>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="flex gap-2">
+                <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card</Button>
+                <Button type="button" variant={paymentType === "cash" ? "default" : "outline"} onClick={() => setPaymentType("cash")} className="flex-1">Cash</Button>
+              </div>
+              <FormField control={form.control} name="tableNumber" render={({field}) => <FormItem><FormLabel>Table No</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
+              <FormField control={form.control} name="customerName" render={({field}) => <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
+              <Button type="submit" className="w-full">Confirm</Button>
+            </form>
+          </Form>
         )}
       </div>
     </div>
