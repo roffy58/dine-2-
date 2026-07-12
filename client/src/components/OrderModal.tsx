@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,7 +22,22 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
   const [isWaiting, setIsWaiting] = useState(false);
+  const [timer, setTimer] = useState(60); // Naya timer state
   const [showDemoPayment, setShowDemoPayment] = useState(false);
+
+  // Cash payment ke liye Timer logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isWaiting && timer > 0) {
+      interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
+    } else if (isWaiting && timer === 0) {
+      toast.success("Order confirmed!");
+      clearCart();
+      onSuccess();
+      onClose();
+    }
+    return () => clearInterval(interval);
+  }, [isWaiting, timer, clearCart, onSuccess, onClose]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -33,24 +48,46 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
-      const newOrder = { ...data, items: cart, total: getTotalPrice(), paymentType, status: "pending" };
+      const newOrder = {
+        table_no: String(data.tableNumber),
+        customer_name: String(data.customerName),
+        items: cart,
+        total: getTotalPrice().toString(),
+        notes: data.notes || "",
+        paymentType: paymentType,
+        paymentStatus: paymentType === "card" ? "paid" : "pending",
+        status: "pending",
+      };
+
       const res = await fetch("/api/orders", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newOrder),
       });
 
-      if (!res.ok) throw new Error("Order failed");
+      const responseData = await res.json();
+      if (!res.ok) throw new Error(responseData.message || "Order failed");
 
       if (paymentType === "cash") {
         setIsWaiting(true);
       } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
-        const sessionData = await (await fetch("/api/create-checkout-session", { method: "POST", body: JSON.stringify({ items: cart }), headers: {"Content-Type": "application/json"} })).json();
-        const stripe = await getStripe();
-        await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        const sessionRes = await fetch("/api/create-checkout-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: cart, total: getTotalPrice() }),
+        });
+        const sessionData = await sessionRes.json();
+        
+        if (sessionData.sessionId) {
+          const stripe = await getStripe();
+          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        }
       } else {
         setShowDemoPayment(true);
       }
-    } catch (e) { toast.error("Something went wrong"); }
+    } catch (e) { 
+      toast.error(e instanceof Error ? e.message : "Something went wrong"); 
+    }
   };
 
   if (!isOpen) return null;
@@ -67,7 +104,11 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
           </div>
         ) : isWaiting ? (
-          <div className="text-center py-6 text-black font-bold">Waiting for Waiter...</div>
+          <div className="text-center py-6 space-y-4">
+            <h2 className="text-2xl font-bold text-red-600">Give cash to the owner</h2>
+            <p className="text-gray-600">Complete payment within:</p>
+            <div className="text-4xl font-mono font-bold text-black">{timer}s</div>
+          </div>
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
