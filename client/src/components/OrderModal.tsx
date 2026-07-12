@@ -22,22 +22,21 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
   const [isWaiting, setIsWaiting] = useState(false);
-  const [timer, setTimer] = useState(60); // Naya timer state
+  const [timer, setTimer] = useState(60); 
   const [showDemoPayment, setShowDemoPayment] = useState(false);
 
-  // Cash payment ke liye Timer logic
+  // FIX: Timer khatam hone par order confirm nahi, fail hona chahiye
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isWaiting && timer > 0) {
       interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
     } else if (isWaiting && timer === 0) {
-      toast.success("Order confirmed!");
-      clearCart();
-      onSuccess();
-      onClose();
+      setIsWaiting(false);
+      toast.error("Payment Timed Out! Please try again.");
+      onClose(); // Modal band ho jayega
     }
     return () => clearInterval(interval);
-  }, [isWaiting, timer, clearCart, onSuccess, onClose]);
+  }, [isWaiting, timer, onClose]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -55,10 +54,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         total: getTotalPrice().toString(),
         notes: data.notes || "",
         paymentType: paymentType,
-        paymentStatus: paymentType === "card" ? "paid" : "pending",
+        paymentStatus: "pending", // Status pending rakha hai taaki owner approve kare
         status: "pending",
       };
 
+      // FIX: Yahan URL check karo, agar Render par backend alag hai, 
+      // toh https://nevolt-backend.onrender.com/api/orders use karna padega
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,7 +70,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       if (!res.ok) throw new Error(responseData.message || "Order failed");
 
       if (paymentType === "cash") {
-        setIsWaiting(true);
+        setIsWaiting(true); // Sirf timer dikhao, order abhi pending hai
       } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
         const sessionRes = await fetch("/api/create-checkout-session", {
           method: "POST",
@@ -108,6 +109,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             <h2 className="text-2xl font-bold text-red-600">Give cash to the owner</h2>
             <p className="text-gray-600">Complete payment within:</p>
             <div className="text-4xl font-mono font-bold text-black">{timer}s</div>
+            <p className="text-sm text-gray-500">Wait for owner to confirm order</p>
           </div>
         ) : (
           <Form {...form}>
