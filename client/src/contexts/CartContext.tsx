@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { CartItem } from "../types";
 import { MenuItem } from "../data/menu";
 
-// 🆕 Payment type ka interface
 export type PaymentType = "card" | "cash";
 
 interface CartContextType {
@@ -15,7 +14,8 @@ interface CartContextType {
   clearCart: () => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
-  checkout: () => Promise<boolean>; // 🆕 Checkout function
+  checkout: () => Promise<boolean>; 
+  finalizeOrder: () => Promise<boolean>; // 🆕 Naya function
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -26,8 +26,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem(CART_STORAGE_KEY);
     return saved ? JSON.parse(saved) : [];
   });
-  
-  // 🆕 Payment type state
+
   const [paymentType, setPaymentType] = useState<PaymentType>("cash");
 
   useEffect(() => {
@@ -59,15 +58,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const getTotalItems = () => cart.reduce((sum, item) => sum + item.quantity, 0);
   const getTotalPrice = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // 🆕 Backend se connect karne wala function
+  // 1. Checkout ab sirf trigger karega (No Sheet Entry here)
   const checkout = async () => {
+    return true; 
+  };
+
+  // 2. FinalizeOrder ab sheet mein data bheje ga (Sirf confirm hone par)
+  const finalizeOrder = async () => {
     try {
       const orderData = {
-        table_no: "Table-1", // Isse aap dynamic kar sakte ho
+        table_no: "Table-1",
         customer_name: "Guest",
         items: cart,
         total: getTotalPrice(),
         paymentType: paymentType,
+        status: "Confirmed", // ✅ Confirmed status
       };
 
       const res = await fetch("/api/orders", {
@@ -82,7 +87,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return false;
     } catch (err) {
-      console.error("Checkout failed", err);
+      console.error("Finalize Order failed", err);
       return false;
     }
   };
@@ -100,6 +105,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         getTotalItems,
         getTotalPrice,
         checkout,
+        finalizeOrder,
       }}
     >
       {children}
