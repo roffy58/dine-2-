@@ -1,5 +1,4 @@
-
- import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
@@ -30,18 +29,28 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [showDemoPayment, setShowDemoPayment] = useState(false);
 
-  // 1-minute countdown timer & timeout handler
+  // 1-minute countdown timer & timeout handler (Cash Timeout)
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isWaiting && !orderSuccess && timer > 0) {
       interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
     } else if (isWaiting && !orderSuccess && timer === 0) {
       setIsWaiting(false);
-      toast.error("Payment Timed Out! Please try again.");
+      toast.error("Payment Timed Out! Order cancelled.");
+      
+      // 👈 FIX 1: Timer khatam hote hi backend par order ko cancel kar do taaki dashboard se hat jaye
+      if (currentOrderId) {
+        fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "cancelled", payment_status: "expired" }),
+        }).catch(err => console.error("Cancel timeout error:", err));
+      }
+
       onClose();
     }
     return () => clearInterval(interval);
-  }, [isWaiting, timer, orderSuccess, onClose]);
+  }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
   // Real-time polling to check if owner confirmed the cash payment
   useEffect(() => {
@@ -52,11 +61,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           const res = await fetch(`${BACKEND_URL}/api/orders?restaurant_id=${RESTAURANT_ID}`);
           if (res.ok) {
             const data = await res.json();
-            // Data array ho sakta hai ya object ke andar orders
             const ordersList = Array.isArray(data) ? data : data.orders || [];
             const thisOrder = ordersList.find((o: any) => String(o.id) === String(currentOrderId));
             
-            // Check if cash is received in payment_status or paymentMethod
             if (
               thisOrder && 
               (thisOrder.payment_status === "cash_received" || thisOrder.paymentMethod === "cash_received")
@@ -70,7 +77,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         } catch (err) {
           console.error("Polling fetch error:", err);
         }
-      }, 2000); // Check every 2 seconds
+      }, 2000);
     }
     return () => clearInterval(pollInterval);
   }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
@@ -87,6 +94,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       const generatedId = Date.now().toString();
       setCurrentOrderId(generatedId);
 
+      const isCash = paymentType === "cash";
+
       const newOrder = {
         id: generatedId,
         restaurant_id: RESTAURANT_ID,
@@ -95,9 +104,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         items: cart,
         total: getTotalPrice().toString(),
         notes: `Payment: ${paymentType.toUpperCase()} | ${data.notes || ""}`,
-        payment_status: paymentType === "cash" ? "cash_pending" : "paid",
+        payment_status: isCash ? "cash_pending" : "paid",
         paymentType: paymentType,
-        paymentStatus: paymentType === "cash" ? "pending" : "paid",
+        paymentStatus: isCash ? "pending" : "paid",
         status: "pending",
       };
 
@@ -110,23 +119,34 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       const responseData = await res.json();
       if (!res.ok) throw new Error(responseData.message || "Order failed");
 
-      if (paymentType === "cash") {
+      if (isCash) {
         setIsWaiting(true);
-        setTimer(60); // Reset timer to 60s
-      } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
-        const sessionRes = await fetch("/api/create-checkout-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: cart, total: getTotalPrice() }),
-        });
-        const sessionData = await sessionRes.json();
-
-        if (sessionData.sessionId) {
-          const stripe = await getStripe();
-          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
-        }
+        setTimer(60); 
       } else {
-        setShowDemoPayment(true);
+        // 👈 FIX 2: Proper Stripe vs Demo Payment Check
+        const hasRealStripeKey = STRIPE_PUBLIC_KEY && 
+                                 STRIPE_PUBLIC_KEY !== "pk_test_dummy" && 
+                                 STRIPE_PUBLIC_KEY.startsWith("pk_");
+
+        if (hasRealStripeKey) {
+          const sessionRes = await fetch("/api/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: cart, total: getTotalPrice() }),
+          });
+          const sessionData = await sessionRes.json();
+
+          if (sessionData.sessionId) {
+            const stripe = await getStripe();
+            await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+          } else {
+            // Fallback agar stripe session fail ho jaye
+            setShowDemoPayment(true);
+          }
+        } else {
+          // Agar key dummy ya available nahi hai, toh Demo Payment modal khulega (direct success nahi hoga)
+          setShowDemoPayment(true);
+        }
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Something went wrong");
@@ -147,10 +167,24 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           </div>
         ) : showDemoPayment ? (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold">Demo Payment</h2>
-            <Input placeholder="Card Number" />
+            <h2 className="text-xl font-bold">Demo Payment Gateway</h2>
+            <p className="text-xs text-gray-500">Stripe keys not configured. Complete test payment below:</p>
+            <Input placeholder="Card Number (4242 4242...)" />
             <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
-            <Button className="w-full" onClick={() => { toast.success("Payment Successful!"); clearCart(); onSuccess(); onClose(); }}>Pay Now</Button>
+            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={async () => {
+              // 👈 Demo payment confirm hone par order ko server par success/paid mark kar denge
+              if (currentOrderId) {
+                await fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "pending", payment_status: "paid" }),
+                }).catch(err => console.error(err));
+              }
+              toast.success("Payment Successful!"); 
+              clearCart(); 
+              onSuccess(); 
+              onClose(); 
+            }}>Pay ₹{getTotalPrice()}</Button>
             <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
           </div>
         ) : isWaiting ? (
@@ -159,12 +193,16 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             <p className="text-gray-600">Complete payment within:</p>
             <div className="text-4xl font-mono font-bold text-black">{timer}s</div>
             <p className="text-sm text-gray-500 animate-pulse">Waiting for owner to confirm cash...</p>
+            <Button variant="outline" className="w-full mt-2" onClick={() => {
+              setIsWaiting(false);
+              onClose();
+            }}>Cancel Order</Button>
           </div>
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="flex gap-2">
-                <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card</Button>
+                <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card (Stripe/Demo)</Button>
                 <Button type="button" variant={paymentType === "cash" ? "default" : "outline"} onClick={() => setPaymentType("cash")} className="flex-1">Cash</Button>
               </div>
               <FormField control={form.control} name="tableNumber" render={({field}) => <FormItem><FormLabel>Table No</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
