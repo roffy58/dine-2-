@@ -1,5 +1,5 @@
 
-  import { useState, useEffect } from "react";
+ import { useState, useEffect } from "react";
 import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
@@ -12,6 +12,7 @@ import { loadStripe } from "@stripe/stripe-js";
 
 const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY || "pk_test_dummy";
 const BACKEND_URL = "https://nevolt-backend.onrender.com";
+const RESTAURANT_ID = "res-1";
 const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
 
 interface OrderModalProps {
@@ -48,13 +49,18 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (isWaiting && currentOrderId && !orderSuccess) {
       pollInterval = setInterval(async () => {
         try {
-          const res = await fetch(`${BACKEND_URL}/api/orders?restaurant_id=res-1`);
+          const res = await fetch(`${BACKEND_URL}/api/orders?restaurant_id=${RESTAURANT_ID}`);
           if (res.ok) {
-            const orders = await res.json();
-            const thisOrder = orders.find((o: any) => o.id === currentOrderId);
+            const data = await res.json();
+            // Data array ho sakta hai ya object ke andar orders
+            const ordersList = Array.isArray(data) ? data : data.orders || [];
+            const thisOrder = ordersList.find((o: any) => String(o.id) === String(currentOrderId));
             
-            // Agar owner ne confirm kar diya aur payment_status "cash_received" ho gaya
-            if (thisOrder && (thisOrder.payment_status === "cash_received" || thisOrder.paymentMethod === "cash_received")) {
+            // Check if cash is received in payment_status or paymentMethod
+            if (
+              thisOrder && 
+              (thisOrder.payment_status === "cash_received" || thisOrder.paymentMethod === "cash_received")
+            ) {
               setOrderSuccess(true);
               setIsWaiting(false);
               clearCart();
@@ -62,9 +68,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             }
           }
         } catch (err) {
-          console.error("Polling error:", err);
+          console.error("Polling fetch error:", err);
         }
-      }, 3000); // Har 3 second mein check karega
+      }, 2000); // Check every 2 seconds
     }
     return () => clearInterval(pollInterval);
   }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
@@ -83,7 +89,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
       const newOrder = {
         id: generatedId,
-        restaurant_id: "res-1",
+        restaurant_id: RESTAURANT_ID,
         table_no: String(data.tableNumber),
         customer_name: String(data.customerName),
         items: cart,
