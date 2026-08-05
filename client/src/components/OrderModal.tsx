@@ -28,6 +28,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [showDemoPayment, setShowDemoPayment] = useState(false);
+  
+  // Form data temporarily hold karne ke liye jab tak card payment complete na ho
+  const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
 
   // 1-minute countdown timer & timeout handler (Cash Timeout)
   useEffect(() => {
@@ -38,7 +41,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       setIsWaiting(false);
       toast.error("Payment Timed Out! Order cancelled.");
       
-      // 👈 FIX 1: Timer khatam hote hi backend par order ko cancel kar do taaki dashboard se hat jaye
       if (currentOrderId) {
         fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
           method: "PATCH",
@@ -90,23 +92,93 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const onSubmit = async (data: OrderFormData) => {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
+    const generatedId = Date.now().toString();
+    setCurrentOrderId(generatedId);
+
+    if (paymentType === "cash") {
+      // Cash ke case mein order turant dashboard par "cash_pending" status ke sath jayega
+      try {
+        const newOrder = {
+          id: generatedId,
+          restaurant_id: RESTAURANT_ID,
+          table_no: String(data.tableNumber),
+          customer_name: String(data.customerName),
+          items: cart,
+          total: getTotalPrice().toString(),
+          notes: `Payment: CASH | ${data.notes || ""}`,
+          payment_status: "cash_pending",
+          paymentType: "cash",
+          paymentStatus: "pending",
+          status: "pending",
+        };
+
+        const res = await fetch(`${BACKEND_URL}/api/orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newOrder),
+        });
+
+        if (!res.ok) throw new Error("Order failed");
+
+        setIsWaiting(true);
+        setTimer(60);
+      } catch (e) {
+        toast.error("Something went wrong placing cash order");
+      }
+    } else {
+      // 👈 CARD PAYMENT FLOW: Order tab tak dashboard par nahi jayega jab tak payment successful na ho
+      setPendingFormData(data);
+
+      const hasRealStripeKey = STRIPE_PUBLIC_KEY && 
+                               STRIPE_PUBLIC_KEY !== "pk_test_dummy" && 
+                               STRIPE_PUBLIC_KEY.startsWith("pk_");
+
+      if (hasRealStripeKey) {
+        try {
+          const sessionRes = await fetch("/api/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              items: cart, 
+              total: getTotalPrice(),
+              orderId: generatedId,
+              tableNo: data.tableNumber,
+              customerName: data.customerName 
+            }),
+          });
+          const sessionData = await sessionRes.json();
+
+          if (sessionData.sessionId) {
+            const stripe = await getStripe();
+            await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+          } else {
+            setShowDemoPayment(true);
+          }
+        } catch (err) {
+          setShowDemoPayment(true);
+        }
+      } else {
+        // Agar real stripe keys nahi hain, toh demo card payment window khulegi
+        setShowDemoPayment(true);
+      }
+    }
+  };
+
+  // Helper function to submit card order to backend AFTER successful demo payment
+  const handleDemoCardPaymentSuccess = async () => {
+    if (!pendingFormData) return;
     try {
-      const generatedId = Date.now().toString();
-      setCurrentOrderId(generatedId);
-
-      const isCash = paymentType === "cash";
-
       const newOrder = {
-        id: generatedId,
+        id: currentOrderId,
         restaurant_id: RESTAURANT_ID,
-        table_no: String(data.tableNumber),
-        customer_name: String(data.customerName),
+        table_no: String(pendingFormData.tableNumber),
+        customer_name: String(pendingFormData.customerName),
         items: cart,
         total: getTotalPrice().toString(),
-        notes: `Payment: ${paymentType.toUpperCase()} | ${data.notes || ""}`,
-        payment_status: isCash ? "cash_pending" : "paid",
-        paymentType: paymentType,
-        paymentStatus: isCash ? "pending" : "paid",
+        notes: `Payment: CARD (Paid) | ${pendingFormData.notes || ""}`,
+        payment_status: "paid",
+        paymentType: "card",
+        paymentStatus: "paid",
         status: "pending",
       };
 
@@ -116,40 +188,14 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         body: JSON.stringify(newOrder),
       });
 
-      const responseData = await res.json();
-      if (!res.ok) throw new Error(responseData.message || "Order failed");
+      if (!res.ok) throw new Error("Failed to save card order");
 
-      if (isCash) {
-        setIsWaiting(true);
-        setTimer(60); 
-      } else {
-        // 👈 FIX 2: Proper Stripe vs Demo Payment Check
-        const hasRealStripeKey = STRIPE_PUBLIC_KEY && 
-                                 STRIPE_PUBLIC_KEY !== "pk_test_dummy" && 
-                                 STRIPE_PUBLIC_KEY.startsWith("pk_");
-
-        if (hasRealStripeKey) {
-          const sessionRes = await fetch("/api/create-checkout-session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items: cart, total: getTotalPrice() }),
-          });
-          const sessionData = await sessionRes.json();
-
-          if (sessionData.sessionId) {
-            const stripe = await getStripe();
-            await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
-          } else {
-            // Fallback agar stripe session fail ho jaye
-            setShowDemoPayment(true);
-          }
-        } else {
-          // Agar key dummy ya available nahi hai, toh Demo Payment modal khulega (direct success nahi hoga)
-          setShowDemoPayment(true);
-        }
-      }
+      setOrderSuccess(true);
+      setShowDemoPayment(false);
+      clearCart();
+      toast.success("Payment Successful & Order Placed!");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Something went wrong");
+      toast.error("Payment successful but failed to place order on server");
     }
   };
 
@@ -162,29 +208,18 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           <div className="text-center py-6 space-y-4">
             <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">✓</div>
             <h2 className="text-2xl font-bold text-green-600">Your order successfully placed!</h2>
-            <p className="text-gray-600">Owner has verified your cash payment. Enjoy your meal!</p>
+            <p className="text-gray-600">Payment verified. Enjoy your meal!</p>
             <Button className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={() => { setOrderSuccess(false); onSuccess(); onClose(); }}>Done</Button>
           </div>
         ) : showDemoPayment ? (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold">Demo Payment Gateway</h2>
-            <p className="text-xs text-gray-500">Stripe keys not configured. Complete test payment below:</p>
+            <h2 className="text-xl font-bold">Demo Card Payment</h2>
+            <p className="text-xs text-gray-500">Stripe live keys not found. Enter test card details to simulate payment:</p>
             <Input placeholder="Card Number (4242 4242...)" />
             <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
-            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={async () => {
-              // 👈 Demo payment confirm hone par order ko server par success/paid mark kar denge
-              if (currentOrderId) {
-                await fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ status: "pending", payment_status: "paid" }),
-                }).catch(err => console.error(err));
-              }
-              toast.success("Payment Successful!"); 
-              clearCart(); 
-              onSuccess(); 
-              onClose(); 
-            }}>Pay ₹{getTotalPrice()}</Button>
+            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleDemoCardPaymentSuccess}>
+              Pay ₹{getTotalPrice()} & Confirm Order
+            </Button>
             <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
           </div>
         ) : isWaiting ? (
@@ -202,12 +237,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="flex gap-2">
-                <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card (Stripe/Demo)</Button>
+                <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card</Button>
                 <Button type="button" variant={paymentType === "cash" ? "default" : "outline"} onClick={() => setPaymentType("cash")} className="flex-1">Cash</Button>
               </div>
               <FormField control={form.control} name="tableNumber" render={({field}) => <FormItem><FormLabel>Table No</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
               <FormField control={form.control} name="customerName" render={({field}) => <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
-              <Button type="submit" className="w-full">Confirm Order</Button>
+              <Button type="submit" className="w-full">Proceed to Pay</Button>
             </form>
           </Form>
         )}
