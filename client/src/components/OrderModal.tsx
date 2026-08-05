@@ -55,6 +55,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         items: cart,
         total: getTotalPrice().toString(),
         notes: `Payment: ${paymentType.toUpperCase()} | ${data.notes || ""}`,
+        payment_status: paymentType === "cash" ? "cash_pending" : "paid",
         paymentType: paymentType,
         paymentStatus: "pending",
         status: "pending",
