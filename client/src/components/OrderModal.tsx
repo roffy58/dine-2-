@@ -9,7 +9,8 @@ import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
 import { loadStripe } from "@stripe/stripe-js";
 
-const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY || "pk_test_dummy";
+// Sirf Publishable key rakhi hai (Publishable key secure hoti hai frontend ke liye)
+const STRIPE_PUBLIC_KEY = "pk_test_51U18Cy4FIpQmXqDsaMjQGP4nmoHEL3zLqZgj0GlGSbXj2HjkpgkrbCcTGHrmh70p0XLSxUDtW1xjHexKH0fzwHlQ00HCj7cjee";
 const BACKEND_URL = "https://nevolt-backend.onrender.com";
 const RESTAURANT_ID = "res-1";
 const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
@@ -28,11 +29,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [showDemoPayment, setShowDemoPayment] = useState(false);
-  
-  // Form data temporarily hold karne ke liye jab tak card payment complete na ho
   const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
 
-  // 1-minute countdown timer & timeout handler (Cash Timeout)
+  // 1-minute countdown timer for cash timeout
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isWaiting && !orderSuccess && timer > 0) {
@@ -96,7 +95,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     setCurrentOrderId(generatedId);
 
     if (paymentType === "cash") {
-      // Cash ke case mein order turant dashboard par "cash_pending" status ke sath jayega
       try {
         const newOrder = {
           id: generatedId,
@@ -126,45 +124,41 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         toast.error("Something went wrong placing cash order");
       }
     } else {
-      // 👈 CARD PAYMENT FLOW: Order tab tak dashboard par nahi jayega jab tak payment successful na ho
+      // CARD PAYMENT FLOW
       setPendingFormData(data);
 
-      const hasRealStripeKey = STRIPE_PUBLIC_KEY && 
-                               STRIPE_PUBLIC_KEY !== "pk_test_dummy" && 
-                               STRIPE_PUBLIC_KEY.startsWith("pk_");
+      try {
+        const sessionRes = await fetch(`${BACKEND_URL}/api/create-checkout-session`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            items: cart, 
+            total: getTotalPrice(),
+            orderId: generatedId,
+            tableNo: data.tableNumber,
+            customerName: data.customerName,
+            restaurant_id: RESTAURANT_ID
+            // Secret key yahan se hata di gayi hai taaki GitHub block na kare
+          }),
+        });
 
-      if (hasRealStripeKey) {
-        try {
-          const sessionRes = await fetch("/api/create-checkout-session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              items: cart, 
-              total: getTotalPrice(),
-              orderId: generatedId,
-              tableNo: data.tableNumber,
-              customerName: data.customerName 
-            }),
-          });
-          const sessionData = await sessionRes.json();
+        const sessionData = await sessionRes.json();
 
-          if (sessionData.sessionId) {
-            const stripe = await getStripe();
-            await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
-          } else {
-            setShowDemoPayment(true);
-          }
-        } catch (err) {
+        if (sessionData.url) {
+          window.location.href = sessionData.url;
+        } else if (sessionData.sessionId) {
+          const stripe = await getStripe();
+          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        } else {
           setShowDemoPayment(true);
         }
-      } else {
-        // Agar real stripe keys nahi hain, toh demo card payment window khulegi
+      } catch (err) {
+        console.error("Stripe session error:", err);
         setShowDemoPayment(true);
       }
     }
   };
 
-  // Helper function to submit card order to backend AFTER successful demo payment
   const handleDemoCardPaymentSuccess = async () => {
     if (!pendingFormData) return;
     try {
@@ -213,8 +207,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           </div>
         ) : showDemoPayment ? (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold">Demo Card Payment</h2>
-            <p className="text-xs text-gray-500">Stripe live keys not found. Enter test card details to simulate payment:</p>
+            <h2 className="text-xl font-bold">Stripe Test Payment</h2>
+            <p className="text-xs text-gray-500">Enter test card details to simulate payment:</p>
             <Input placeholder="Card Number (4242 4242...)" />
             <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
             <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleDemoCardPaymentSuccess}>
