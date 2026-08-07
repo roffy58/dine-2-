@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
@@ -33,7 +33,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
-      // FIX: Yahan data ko explicitly string mein convert kiya taaki Zod validation pass ho
+      // build order payload (kept same shape)
       const newOrder = {
         table_no: String(data.tableNumber),
         customer_name: String(data.customerName),
@@ -45,34 +45,69 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         status: "pending",
       };
 
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newOrder),
-      });
-
-      const responseData = await res.json();
-      if (!res.ok) throw new Error(responseData.message || "Order failed");
-
+      // CASH: keep existing behavior - POST immediately
       if (paymentType === "cash") {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newOrder),
+        });
+        const responseData = await res.json();
+        if (!res.ok) throw new Error(responseData.message || "Order failed");
         setIsWaiting(true);
-      } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
+        return;
+      }
+
+      // CARD (Stripe): save pending order locally, then create checkout session & redirect
+      if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
+        localStorage.setItem("pending_order", JSON.stringify(newOrder));
+
         const sessionRes = await fetch("/api/create-checkout-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ items: cart, total: getTotalPrice() }),
         });
         const sessionData = await sessionRes.json();
-        
+
         if (sessionData.sessionId) {
           const stripe = await getStripe();
           await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
+        } else {
+          throw new Error(sessionData.message || "Failed to create Stripe session");
         }
-      } else {
-        setShowDemoPayment(true);
+
+        return;
       }
-    } catch (e) { 
-      toast.error(e instanceof Error ? e.message : "Something went wrong"); 
+
+      // Demo payment path: save pending order and show demo UI (demo Pay Now will POST it)
+      localStorage.setItem("pending_order", JSON.stringify(newOrder));
+      setShowDemoPayment(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong");
+    }
+  };
+
+  // Demo Pay Now handler — posts pending_order then shows success
+  const handleDemoPay = async () => {
+    try {
+      const raw = localStorage.getItem("pending_order");
+      if (!raw) throw new Error("No pending order found");
+      const pending = JSON.parse(raw);
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pending),
+      });
+      const responseData = await res.json();
+      if (!res.ok) throw new Error(responseData.message || "Order failed");
+
+      toast.success("Payment Successful!");
+      clearCart();
+      localStorage.removeItem("pending_order");
+      onSuccess();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong");
     }
   };
 
@@ -86,7 +121,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             <h2 className="text-xl font-bold">Demo Payment</h2>
             <Input placeholder="Card Number" />
             <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
-            <Button className="w-full" onClick={() => { toast.success("Payment Successful!"); clearCart(); onSuccess(); onClose(); }}>Pay Now</Button>
+            <Button className="w-full" onClick={handleDemoPay}>Pay Now</Button>
             <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
           </div>
         ) : isWaiting ? (
