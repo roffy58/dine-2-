@@ -31,6 +31,41 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [showDemoPayment, setShowDemoPayment] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
 
+  // ⚡ Stripe payment ke baad redirect होकर aane par order save karne ka logic
+  useEffect(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const paymentStatus = queryParams.get("payment");
+
+    if (paymentStatus === "success") {
+      const rawPending = localStorage.getItem("pending_order");
+      if (rawPending) {
+        const pendingOrder = JSON.parse(rawPending);
+        
+        fetch(`${BACKEND_URL}/api/orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(pendingOrder),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error("Failed to save order");
+            return res.json();
+          })
+          .then(() => {
+            toast.success("Payment Successful & Order Placed!");
+            clearCart();
+            localStorage.removeItem("pending_order");
+            setOrderSuccess(true);
+            // URL se ?payment=success hata rahe hain taaki baar-baar trigger na ho
+            window.history.replaceState({}, document.title, window.location.pathname);
+          })
+          .catch((err) => {
+            console.error("Save order error:", err);
+            toast.error("Payment was successful, but failed to save order on server!");
+          });
+      }
+    }
+  }, [clearCart]);
+
   // 1-minute countdown timer for cash timeout
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -39,7 +74,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     } else if (isWaiting && !orderSuccess && timer === 0) {
       setIsWaiting(false);
       toast.error("Payment Timed Out! Order cancelled.");
-      
+
       if (currentOrderId) {
         fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
           method: "PATCH",
@@ -64,7 +99,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
             const thisOrder = ordersList.find((o: any) => String(o.id) === String(currentOrderId));
-            
+
             if (
               thisOrder && 
               (thisOrder.payment_status === "cash_received" || thisOrder.paymentMethod === "cash_received")
@@ -127,6 +162,23 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       // CARD PAYMENT FLOW
       setPendingFormData(data);
 
+      const cardOrderData = {
+        id: generatedId,
+        restaurant_id: RESTAURANT_ID,
+        table_no: String(data.tableNumber),
+        customer_name: String(data.customerName),
+        items: cart,
+        total: getTotalPrice().toString(),
+        notes: `Payment: CARD (Paid) | ${data.notes || ""}`,
+        payment_status: "paid",
+        paymentType: "card",
+        paymentStatus: "paid",
+        status: "pending",
+      };
+
+      // Redirect hone se pehle order ko localStorage me save kar rahe hain
+      localStorage.setItem("pending_order", JSON.stringify(cardOrderData));
+
       try {
         const sessionRes = await fetch(`${BACKEND_URL}/api/create-checkout-session`, {
           method: "POST",
@@ -138,7 +190,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             tableNo: data.tableNumber,
             customerName: data.customerName,
             restaurant_id: RESTAURANT_ID
-            // Secret key yahan se hata di gayi hai taaki GitHub block na kare
           }),
         });
 
