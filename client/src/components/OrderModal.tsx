@@ -7,11 +7,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
-import { loadStripe } from "@stripe/stripe-js";
-
-// Hardcoded Stripe publishable test key as requested
-const STRIPE_PUBLIC_KEY = "pk_test_51U18Cy4FIpQmXqDsaMjQGP4nmoHEL3zLqZgj0GlGSbXj2HjkpgkrbCcTGHrmh70p0XLSxUDtW1xjHexKH0fzwHlQ00HCj7cjee";
-const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -34,8 +29,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
-      // build order payload (kept same shape)
+      const orderId = Date.now().toString();
       const newOrder = {
+        id: orderId,
         table_no: String(data.tableNumber),
         customer_name: String(data.customerName),
         items: cart,
@@ -46,7 +42,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         status: "pending",
       };
 
-      // CASH: keep existing behavior - POST immediately
+      // CASH: POST immediately and show waiting screen
       if (paymentType === "cash") {
         const res = await fetch("/api/orders", {
           method: "POST",
@@ -59,54 +55,27 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         return;
       }
 
-      // CARD (Stripe): save pending order locally, then create checkout session & redirect
-      if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
-        localStorage.setItem("pending_order", JSON.stringify(newOrder));
-
-        const sessionRes = await fetch("/api/create-checkout-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: cart, total: getTotalPrice() }),
-        });
-        const sessionData = await sessionRes.json();
-
-        if (sessionData.sessionId) {
-          const stripe = await getStripe();
-          await stripe?.redirectToCheckout({ sessionId: sessionData.sessionId });
-        } else {
-          throw new Error(sessionData.message || "Failed to create Stripe session");
-        }
-
-        return;
-      }
-
-      // Demo payment path: save pending order and show demo UI (demo Pay Now will POST it)
-      localStorage.setItem("pending_order", JSON.stringify(newOrder));
-      setShowDemoPayment(true);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Something went wrong");
-    }
-  };
-
-  // Demo Pay Now handler — posts pending_order then shows success
-  const handleDemoPay = async () => {
-    try {
-      const raw = localStorage.getItem("pending_order");
-      if (!raw) throw new Error("No pending order found");
-      const pending = JSON.parse(raw);
-      const res = await fetch("/api/orders", {
+      // CARD (Stripe): Create checkout session and redirect directly using sessionData.url
+      const sessionRes = await fetch("/api/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pending),
+        body: JSON.stringify({ 
+          items: cart, 
+          total: getTotalPrice(),
+          orderId: orderId,
+          tableNo: data.tableNumber,
+          customerName: data.customerName
+        }),
       });
-      const responseData = await res.json();
-      if (!res.ok) throw new Error(responseData.message || "Order failed");
+      const sessionData = await sessionRes.json();
 
-      toast.success("Payment Successful!");
-      clearCart();
-      localStorage.removeItem("pending_order");
-      onSuccess();
-      onClose();
+      if (sessionData.url) {
+        // ⚡ Direct redirect to Stripe Checkout URL (Fixes redirectToCheckout error)
+        window.location.href = sessionData.url;
+      } else {
+        throw new Error(sessionData.message || "Failed to create Stripe session");
+      }
+
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Something went wrong");
     }
@@ -117,15 +86,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
-        {showDemoPayment ? (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold">Demo Payment</h2>
-            <Input placeholder="Card Number" />
-            <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
-            <Button className="w-full" onClick={handleDemoPay}>Pay Now</Button>
-            <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
-          </div>
-        ) : isWaiting ? (
+        {isWaiting ? (
           <div className="text-center py-6 text-black font-bold">Waiting for Waiter...</div>
         ) : (
           <Form {...form}>
