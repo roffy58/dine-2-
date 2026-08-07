@@ -13,6 +13,7 @@ import { BackgroundSlideshow } from "./components/BackgroundSlideshow";
 import HomePage from "./pages/HomePage";
 import CategoryPage from "./pages/CategoryPage";
 import { useState } from "react";
+import { StripeReturnHandler } from "./components/StripeReturnHandler";
 
 function Router() {
   return (
@@ -41,6 +42,9 @@ function App() {
       <ThemeProvider>
         <SearchProvider>
           <CartProvider>
+            {/* Stripe return handler will POST pending_order and trigger success screen */}
+            <StripeReturnHandler onSuccess={handleOrderSuccess} />
+
             <div className="min-h-screen bg-background relative">
               <BackgroundSlideshow />
               <Header />
