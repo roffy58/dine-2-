@@ -7,6 +7,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
+import { loadStripe } from "@stripe/stripe-js";
+
+// Stripe Public Test Key restored
+const STRIPE_PUBLIC_KEY = "pk_test_51U18Cy4FIpQmXqDsaMjQGP4nmoHEL3zLqZgj0GlGSbXj2HjkpgkrbCcTGHrmh70p0XLSxUDtW1xjHexKH0fzwHlQ00HCj7cjee";
+const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -18,7 +23,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const { cart, getTotalPrice, clearCart } = useCart();
   const [paymentType, setPaymentType] = useState<"card" | "cash" | null>(null);
   const [isWaiting, setIsWaiting] = useState(false);
-  const [showDemoPayment, setShowDemoPayment] = useState(false);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -55,7 +59,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         return;
       }
 
-      // CARD (Stripe): Create checkout session and redirect directly using sessionData.url
+      // CARD (Stripe): Create checkout session and redirect using Stripe URL
       const sessionRes = await fetch("/api/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,7 +74,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       const sessionData = await sessionRes.json();
 
       if (sessionData.url) {
-        // ⚡ Direct redirect to Stripe Checkout URL (Fixes redirectToCheckout error)
+        // Initialize Stripe & Redirect directly to Stripe URL
+        await getStripe();
         window.location.href = sessionData.url;
       } else {
         throw new Error(sessionData.message || "Failed to create Stripe session");
