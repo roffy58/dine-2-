@@ -9,7 +9,8 @@ import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
 import { loadStripe } from "@stripe/stripe-js";
 
-const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY || "pk_test_dummy";
+// Hardcoded Stripe publishable test key as requested
+const STRIPE_PUBLIC_KEY = "pk_test_51U18Cy4FIpQmXqDsaMjQGP4nmoHEL3zLqZgj0GlGSbXj2HjkpgkrbCcTGHrmh70p0XLSxUDtW1xjHexKH0fzwHlQ00HCj7cjee";
 const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
 
 interface OrderModalProps {
