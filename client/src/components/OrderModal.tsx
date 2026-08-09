@@ -88,7 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Strict Check)
+  // Real-time polling to check if owner confirmed the cash payment (Strict ID Check)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && currentOrderId && !orderSuccess) {
@@ -99,10 +99,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // 🔍 Updated robust find logic
+            // Strict check: ID match honi chahiye
             const thisOrder = ordersList.find((o: any) => {
               const orderId = String(o.id || o._id || o.orderId || "");
-              return orderId === String(currentOrderId) || (o.customer_name === pendingFormData?.customerName && (o.payment_status === "cash_received" || o.paymentStatus === "cash_received"));
+              return orderId === String(currentOrderId);
             });
 
             // 🔍 Debugging logs
@@ -111,7 +111,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             console.log("🔍 All fetched order IDs:", ordersList.map((o: any) => o.id || o._id || o.orderId));
             console.log("🎯 Matched Order Found:", thisOrder);
 
-            // Sirf tabhi success karega jab owner explicitly cash_received ya paid set karega
+            // Yahan check hoga ki order mil gaya hai AUR owner ne status cash_received ya paid kar diya hai
             if (
               thisOrder &&
               (
@@ -134,7 +134,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }, 2000);
     }
     return () => clearInterval(pollInterval);
-  }, [isWaiting, currentOrderId, orderSuccess, clearCart, pendingFormData]);
+  }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -146,7 +146,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
     const generatedId = Date.now().toString();
     setCurrentOrderId(generatedId);
-    setPendingFormData(data); // Save form data so customer name can be matched in polling
+    setPendingFormData(data);
 
     if (paymentType === "cash") {
       try {
