@@ -88,7 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Customer Name & Table Check)
+  // Real-time polling to check if owner confirmed the cash payment (Strict Customer Name + Table + Owner Action Check)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && !orderSuccess) {
@@ -99,7 +99,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // Sirf customer name aur table number match karega, ID ki zaroorat hi nahi!
+            // Customer name aur table match ho, aur owner ne explicitly cash confirm kiya ho
             const thisOrder = ordersList.find((o: any) => {
               const isCustomerMatch = 
                 String(o.customer_name || "").trim().toLowerCase() === String(pendingFormData?.customerName || "").trim().toLowerCase() &&
@@ -111,7 +111,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
                 o.paymentMethod === "cash_received"
               );
               
-              return isCustomerMatch && isOwnerConfirmedCash;
+              // Yeh ensure karega ki order create hote waqt hi cash_received na ho (owner ke click ka wait kare)
+              const isNotAlreadyReceived = o.payment_status !== "cash_received" && o.paymentStatus !== "cash_received";
+
+              return isCustomerMatch && isOwnerConfirmedCash && isNotAlreadyReceived;
             });
 
             // 🔍 Debugging logs
