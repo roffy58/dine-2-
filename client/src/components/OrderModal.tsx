@@ -88,12 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  const form = useForm<OrderFormData>({
-    resolver: zodResolver(orderFormSchema),
-    defaultValues: { tableNumber: "", customerName: "", notes: "" },
-  });
-
-  // Real-time polling with Table Number & ID Fallback
+  // Real-time polling to check if owner confirmed the cash payment (Strict Check)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && currentOrderId && !orderSuccess) {
@@ -103,28 +98,28 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           if (res.ok) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
-
-            // ID match ya Table Number + cash_received fallback match
+            
+            // Exact ID match
             const thisOrder = ordersList.find((o: any) => 
               String(o.id) === String(currentOrderId) || 
-              String(o._id) === String(currentOrderId) ||
-              (String(o.table_no) === String(form.getValues("tableNumber")) && o.payment_status === "cash_received")
+              String(o._id) === String(currentOrderId)
             );
 
-            if (thisOrder) {
-              const isConfirmed = 
+            // Sirf tabhi success karega jab owner explicitly cash_received ya paid set karega
+            if (
+              thisOrder &&
+              (
                 thisOrder.payment_status === "cash_received" || 
-                thisOrder.payment_status === "paid" ||
-                thisOrder.paymentStatus === "cash_received" ||
-                thisOrder.paymentStatus === "paid" ||
-                thisOrder.status === "confirmed";
-
-              if (isConfirmed) {
-                setOrderSuccess(true);
-                setIsWaiting(false);
-                clearCart();
-                toast.success("Cash payment verified by owner!");
-              }
+                thisOrder.paymentStatus === "cash_received" || 
+                thisOrder.paymentMethod === "cash_received" ||
+                thisOrder.payment_status === "paid" || 
+                thisOrder.paymentStatus === "paid"
+              )
+            ) {
+              setOrderSuccess(true);
+              setIsWaiting(false);
+              clearCart();
+              toast.success("Cash payment verified by owner!");
             }
           }
         } catch (err) {
@@ -133,7 +128,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }, 2000);
     }
     return () => clearInterval(pollInterval);
-  }, [isWaiting, currentOrderId, orderSuccess, clearCart, form]);
+  }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
+
+  const form = useForm<OrderFormData>({
+    resolver: zodResolver(orderFormSchema),
+    defaultValues: { tableNumber: "", customerName: "", notes: "" },
+  });
 
   const onSubmit = async (data: OrderFormData) => {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
@@ -195,8 +195,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         const sessionRes = await fetch(`${BACKEND_URL}/api/create-checkout-session`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            items: cart, 
+          body: JSON.stringify({
+            items: cart,
             total: getTotalPrice(),
             orderId: generatedId,
             tableNo: data.tableNumber,
