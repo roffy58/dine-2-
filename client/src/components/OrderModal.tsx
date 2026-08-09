@@ -88,7 +88,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Robust check ignoring stale paymentStatus)
+  const form = useForm<OrderFormData>({
+    resolver: zodResolver(orderFormSchema),
+    defaultValues: { tableNumber: "", customerName: "", notes: "" },
+  });
+
+  // Real-time polling with Table Number & ID Fallback
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && currentOrderId && !orderSuccess) {
@@ -99,17 +104,19 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // Yahan id aur _id dono check hoga taaki mismatch ki koi gunjaish na rahe
+            // ID match ya Table Number + cash_received fallback match
             const thisOrder = ordersList.find((o: any) => 
               String(o.id) === String(currentOrderId) || 
-              String(o._id) === String(currentOrderId)
+              String(o._id) === String(currentOrderId) ||
+              (String(o.table_no) === String(form.getValues("tableNumber")) && o.payment_status === "cash_received")
             );
 
             if (thisOrder) {
-              // 💡 Owner dashboard sirf payment_status update kar rha hai, isliye hum primary focus uspe rakh rahe hain
               const isConfirmed = 
                 thisOrder.payment_status === "cash_received" || 
                 thisOrder.payment_status === "paid" ||
+                thisOrder.paymentStatus === "cash_received" ||
+                thisOrder.paymentStatus === "paid" ||
                 thisOrder.status === "confirmed";
 
               if (isConfirmed) {
@@ -126,12 +133,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }, 2000);
     }
     return () => clearInterval(pollInterval);
-  }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
-
-  const form = useForm<OrderFormData>({
-    resolver: zodResolver(orderFormSchema),
-    defaultValues: { tableNumber: "", customerName: "", notes: "" },
-  });
+  }, [isWaiting, currentOrderId, orderSuccess, clearCart, form]);
 
   const onSubmit = async (data: OrderFormData) => {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
