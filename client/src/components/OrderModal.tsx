@@ -88,7 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Updated with comprehensive check)
+  // Real-time polling to check if owner confirmed the cash payment (Robust check ignoring stale paymentStatus)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && currentOrderId && !orderSuccess) {
@@ -106,11 +106,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             );
 
             if (thisOrder) {
+              // 💡 Owner dashboard sirf payment_status update kar rha hai, isliye hum primary focus uspe rakh rahe hain
               const isConfirmed = 
                 thisOrder.payment_status === "cash_received" || 
-                thisOrder.paymentStatus === "cash_received" ||
                 thisOrder.payment_status === "paid" ||
-                thisOrder.paymentStatus === "paid" ||
                 thisOrder.status === "confirmed";
 
               if (isConfirmed) {
