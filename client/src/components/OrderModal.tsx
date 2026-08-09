@@ -88,7 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Updated with safe ID matching)
+  // Real-time polling to check if owner confirmed the cash payment (Updated with comprehensive check)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && currentOrderId && !orderSuccess) {
@@ -98,26 +98,27 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           if (res.ok) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
-            
+
             // Yahan id aur _id dono check hoga taaki mismatch ki koi gunjaish na rahe
             const thisOrder = ordersList.find((o: any) => 
               String(o.id) === String(currentOrderId) || 
               String(o._id) === String(currentOrderId)
             );
 
-            if (
-              thisOrder && 
-              (
+            if (thisOrder) {
+              const isConfirmed = 
                 thisOrder.payment_status === "cash_received" || 
                 thisOrder.paymentStatus === "cash_received" ||
+                thisOrder.payment_status === "paid" ||
                 thisOrder.paymentStatus === "paid" ||
-                thisOrder.status === "confirmed"
-              )
-            ) {
-              setOrderSuccess(true);
-              setIsWaiting(false);
-              clearCart();
-              toast.success("Cash payment verified by owner!");
+                thisOrder.status === "confirmed";
+
+              if (isConfirmed) {
+                setOrderSuccess(true);
+                setIsWaiting(false);
+                clearCart();
+                toast.success("Cash payment verified by owner!");
+              }
             }
           }
         } catch (err) {
