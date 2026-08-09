@@ -40,7 +40,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       const rawPending = localStorage.getItem("pending_order");
       if (rawPending) {
         const pendingOrder = JSON.parse(rawPending);
-        
+
         fetch(`${BACKEND_URL}/api/orders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -88,7 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment
+  // Real-time polling to check if owner confirmed the cash payment (Updated with safe ID matching)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && currentOrderId && !orderSuccess) {
@@ -98,11 +98,21 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           if (res.ok) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
-            const thisOrder = ordersList.find((o: any) => String(o.id) === String(currentOrderId));
+            
+            // Yahan id aur _id dono check hoga taaki mismatch ki koi gunjaish na rahe
+            const thisOrder = ordersList.find((o: any) => 
+              String(o.id) === String(currentOrderId) || 
+              String(o._id) === String(currentOrderId)
+            );
 
             if (
               thisOrder && 
-              (thisOrder.payment_status === "cash_received" || thisOrder.paymentMethod === "cash_received")
+              (
+                thisOrder.payment_status === "cash_received" || 
+                thisOrder.paymentStatus === "cash_received" ||
+                thisOrder.paymentStatus === "paid" ||
+                thisOrder.status === "confirmed"
+              )
             ) {
               setOrderSuccess(true);
               setIsWaiting(false);
