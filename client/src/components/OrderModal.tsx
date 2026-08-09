@@ -99,15 +99,16 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // Exact ID match
-            const thisOrder = ordersList.find((o: any) => 
-              String(o.id) === String(currentOrderId) || 
-              String(o._id) === String(currentOrderId)
-            );
+            // 🔍 Updated find method with fallback for _id / orderId
+            const thisOrder = ordersList.find((o: any) => {
+              const orderId = String(o.id || o._id || o.orderId || "");
+              return orderId === String(currentOrderId);
+            });
 
-            // 🔍 Debugging logs yahan add kiye hain taaki status pata chale
+            // 🔍 Debugging logs
             console.log("🔍 Looking for Order ID:", currentOrderId);
             console.log("📦 Orders fetched from API:", ordersList);
+            console.log("🔍 All fetched order IDs:", ordersList.map((o: any) => o.id || o._id || o.orderId));
             console.log("🎯 Matched Order Found:", thisOrder);
 
             // Sirf tabhi success karega jab owner explicitly cash_received ya paid set karega
