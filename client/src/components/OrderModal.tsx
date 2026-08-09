@@ -88,10 +88,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Strict ID + Confirmed Cash Check)
+  // Real-time polling to check if owner confirmed the cash payment (Customer Name & Table Check)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
-    if (isWaiting && currentOrderId && !orderSuccess) {
+    if (isWaiting && !orderSuccess) {
       pollInterval = setInterval(async () => {
         try {
           const res = await fetch(`${BACKEND_URL}/api/orders?restaurant_id=${RESTAURANT_ID}`);
@@ -99,36 +99,26 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // Sirf tabhi match karega jab owner explicitly 'cash_received' set karega
+            // Sirf customer name aur table number match karega, ID ki zaroorat hi nahi!
             const thisOrder = ordersList.find((o: any) => {
-              const orderId = String(o.id || o._id || o.orderId || "");
-              const isIdMatch = orderId === String(currentOrderId);
-              
+              const isCustomerMatch = 
+                String(o.customer_name || "").trim().toLowerCase() === String(pendingFormData?.customerName || "").trim().toLowerCase() &&
+                String(o.table_no || o.tableNumber || "").trim() === String(pendingFormData?.tableNumber || "").trim();
+
               const isOwnerConfirmedCash = (
                 o.payment_status === "cash_received" || 
                 o.paymentStatus === "cash_received" || 
                 o.paymentMethod === "cash_received"
               );
               
-              // ID match honi chahiye AUR owner ka confirmed cash hona zaroori hai
-              return isIdMatch && isOwnerConfirmedCash;
+              return isCustomerMatch && isOwnerConfirmedCash;
             });
 
             // 🔍 Debugging logs
-            console.log("🔍 Looking for Order ID:", currentOrderId);
             console.log("📦 Orders fetched from API:", ordersList);
-            console.log("🔍 All fetched order IDs:", ordersList.map((o: any) => o.id || o._id || o.orderId));
             console.log("🎯 Matched Order Found:", thisOrder);
 
-            // Yahan check hoga ki order mil gaya hai AUR owner ne status cash_received kar diya hai
-            if (
-              thisOrder &&
-              (
-                thisOrder.payment_status === "cash_received" || 
-                thisOrder.paymentStatus === "cash_received" || 
-                thisOrder.paymentMethod === "cash_received"
-              )
-            ) {
+            if (thisOrder) {
               setOrderSuccess(true);
               setIsWaiting(false);
               clearCart();
@@ -141,7 +131,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }, 2000);
     }
     return () => clearInterval(pollInterval);
-  }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
+  }, [isWaiting, orderSuccess, clearCart, pendingFormData]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
