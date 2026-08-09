@@ -88,7 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Strict ID Check)
+  // Real-time polling to check if owner confirmed the cash payment (Strict + Smart Fallback Check)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && currentOrderId && !orderSuccess) {
@@ -99,10 +99,15 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // Strict check: ID match honi chahiye
+            // Strict + Smart Fallback find logic
             const thisOrder = ordersList.find((o: any) => {
               const orderId = String(o.id || o._id || o.orderId || "");
-              return orderId === String(currentOrderId);
+              const isIdMatch = orderId === String(currentOrderId);
+              
+              // Agar ID match ho Jaye YA FIR koi bhi order cash_received ho gaya ho jo ishi customer name ka hai
+              const isCashReceivedByOwner = (o.payment_status === "cash_received" || o.paymentStatus === "cash_received" || o.paymentMethod === "cash_received" || o.payment_status === "paid" || o.paymentStatus === "paid");
+              
+              return isIdMatch || (isCashReceivedByOwner && o.customer_name === pendingFormData?.customerName);
             });
 
             // 🔍 Debugging logs
@@ -134,7 +139,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }, 2000);
     }
     return () => clearInterval(pollInterval);
-  }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
+  }, [isWaiting, currentOrderId, orderSuccess, clearCart, pendingFormData]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
