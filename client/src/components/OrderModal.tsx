@@ -99,10 +99,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // 🔍 Updated find method with fallback for _id / orderId
+            // 🔍 Updated robust find logic
             const thisOrder = ordersList.find((o: any) => {
               const orderId = String(o.id || o._id || o.orderId || "");
-              return orderId === String(currentOrderId);
+              return orderId === String(currentOrderId) || (o.customer_name === pendingFormData?.customerName && (o.payment_status === "cash_received" || o.paymentStatus === "cash_received"));
             });
 
             // 🔍 Debugging logs
@@ -134,7 +134,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }, 2000);
     }
     return () => clearInterval(pollInterval);
-  }, [isWaiting, currentOrderId, orderSuccess, clearCart]);
+  }, [isWaiting, currentOrderId, orderSuccess, clearCart, pendingFormData]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
@@ -146,6 +146,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
     const generatedId = Date.now().toString();
     setCurrentOrderId(generatedId);
+    setPendingFormData(data); // Save form data so customer name can be matched in polling
 
     if (paymentType === "cash") {
       try {
@@ -178,8 +179,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }
     } else {
       // CARD PAYMENT FLOW
-      setPendingFormData(data);
-
       const cardOrderData = {
         id: generatedId,
         restaurant_id: RESTAURANT_ID,
