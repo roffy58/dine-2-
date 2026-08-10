@@ -99,7 +99,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // 🔍 Strict ID match: Sirf wahi order match hoga jo ishi baar generate hua hai
+            // 🔍 Strict ID match: Sirf wahi order match hoga jo server par save hua hai
             const thisOrder = ordersList.find((o: any) => {
               const isIdMatch = String(o.id || "").trim() === String(currentOrderId).trim();
 
@@ -109,7 +109,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
                 o.paymentMethod === "cash_received" ||
                 o.paymentType === "cash_received"
               );
-              
+
               return isIdMatch && isOwnerConfirmedCash;
             });
 
@@ -141,7 +141,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     const generatedId = Date.now().toString();
-    setCurrentOrderId(generatedId);
     setPendingFormData(data);
 
     if (paymentType === "cash") {
@@ -168,12 +167,22 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
         if (!res.ok) throw new Error("Order failed");
 
+        const savedOrder = await res.json();
+        
+        // ⚡ ASLI FIX: Server se jo exact ID return hoke aayi hai, wahi set karenge
+        if (savedOrder && savedOrder.id) {
+          setCurrentOrderId(savedOrder.id);
+        } else {
+          setCurrentOrderId(generatedId);
+        }
+
         setIsWaiting(true);
         setTimer(60);
       } catch (e) {
         toast.error("Something went wrong placing cash order");
       }
     } else {
+      setCurrentOrderId(generatedId);
       // CARD PAYMENT FLOW
       const cardOrderData = {
         id: generatedId,
