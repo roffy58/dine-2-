@@ -11,26 +11,29 @@ export function SearchBar() {
   };
 
   return (
-    <div className="relative w-full max-w-md">
-      <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
+    <div className="relative flex items-center w-full max-w-md">
+      {/* ⚡ Search Icon Placement Fix */}
+      <MagnifyingGlassIcon className="absolute left-3.5 h-5 w-5 text-muted-foreground pointer-events-none z-10" />
+      
       <Input
-        type="search"
+        type="text"
         placeholder="Search menu items..."
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        className="pl-10 pr-10"
+        className="w-full pl-10 pr-10 py-2 rounded-lg bg-background text-foreground border border-input shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         data-testid="input-search"
       />
+
+      {/* ⚡ Clear (Cross) Button & Icon Placement Fix */}
       {searchQuery && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+        <button
+          type="button"
           onClick={handleClear}
+          className="absolute right-3.5 h-6 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground z-10 rounded-full transition-colors"
           data-testid="button-clear-search"
         >
           <XMarkIcon className="h-4 w-4" />
-        </Button>
+        </button>
       )}
     </div>
   );
