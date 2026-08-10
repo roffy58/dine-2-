@@ -88,10 +88,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Customer Name & Table + Cash Received Match)
+  // ⚡ Real-time polling: Sirf aur sirf CURRENT ORDER ID ko database mein track karega
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
-    if (isWaiting && !orderSuccess) {
+    if (isWaiting && !orderSuccess && currentOrderId) {
       pollInterval = setInterval(async () => {
         try {
           const res = await fetch(`${BACKEND_URL}/api/orders?restaurant_id=${RESTAURANT_ID}`);
@@ -99,11 +99,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // Customer name aur table match ho, aur owner ne cash confirm kar diya ho
+            // 🔍 Strict ID match: Sirf wahi order match hoga jo ishi baar generate hua hai
             const thisOrder = ordersList.find((o: any) => {
-              const isCustomerMatch = 
-                String(o.customer_name || "").trim().toLowerCase() === String(pendingFormData?.customerName || "").trim().toLowerCase() &&
-                String(o.table_no || o.tableNumber || "").trim() === String(pendingFormData?.tableNumber || "").trim();
+              const isIdMatch = String(o.id || "").trim() === String(currentOrderId).trim();
 
               const isOwnerConfirmedCash = (
                 o.payment_status === "cash_received" || 
@@ -112,12 +110,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
                 o.paymentType === "cash_received"
               );
               
-              return isCustomerMatch && isOwnerConfirmedCash;
+              return isIdMatch && isOwnerConfirmedCash;
             });
 
             // 🔍 Debugging logs
-            console.log("📦 Orders fetched from API:", ordersList);
-            console.log("🎯 Matched Order Found:", thisOrder);
+            console.log("🎯 Polling for Current Order ID:", currentOrderId);
+            console.log("📦 Matched Order in DB:", thisOrder);
 
             if (thisOrder) {
               setOrderSuccess(true);
@@ -132,7 +130,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }, 1500);
     }
     return () => clearInterval(pollInterval);
-  }, [isWaiting, orderSuccess, clearCart, pendingFormData]);
+  }, [isWaiting, orderSuccess, clearCart, currentOrderId]);
 
   const form = useForm<OrderFormData>({
     resolver: zodResolver(orderFormSchema),
