@@ -20,7 +20,8 @@ export default function CategoryPage() {
   if (!allItems.length) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">Category not found</p>
+        {/* Category not found text ko white kiya */}
+        <p className="text-white">Category not found</p>
       </div>
     );
   }
@@ -45,7 +46,8 @@ export default function CategoryPage() {
           <Button
             variant="ghost"
             onClick={() => setLocation("/")}
-            className="mb-4"
+            // Back button ko white kiya taaki background par saaf dikhe
+            className="mb-4 text-white hover:bg-white/10"
             data-testid="button-back"
           >
             <ArrowLeftIcon className="h-4 w-4 mr-2" />
@@ -53,10 +55,12 @@ export default function CategoryPage() {
           </Button>
 
           <div className="py-4 md:py-6">
-            <h2 className="text-3xl md:text-4xl font-semibold font-serif text-foreground mb-2">
+            {/* ⚡ 1. Category ka main naam (jaise 'Sabji') - Ab ye all-time white rahega aur font serif/bold ho gaya hai */}
+            <h2 className="text-4xl md:text-5xl font-extrabold font-serif text-white mb-2 tracking-tight">
               {category}
             </h2>
-            <p className="text-sm md:text-base text-muted-foreground">
+            {/* ⚡ 2. Category ka item count subtext - Ye bhi white ho gaya hai */}
+            <p className="text-sm md:text-base text-white/90">
               {searchQuery
                 ? `${items.length} of ${allItems.length} items`
                 : `${items.length} delicious items`}
@@ -66,7 +70,8 @@ export default function CategoryPage() {
 
         {items.length === 0 && searchQuery ? (
           <div className="text-center py-12" data-testid="no-results">
-            <p className="text-muted-foreground">
+            {/* Search empty message ko white kiya */}
+            <p className="text-white">
               No items found in {category} matching "{searchQuery}"
             </p>
           </div>
@@ -95,6 +100,7 @@ export default function CategoryPage() {
                 )}
                 <div className="p-4 space-y-3">
                   <div>
+                    {/* Item card ke andar ka naam (Theme ke hisaab se hi chalega kyunki cards white background ke hote hain) */}
                     <h3 className="text-lg md:text-xl font-medium text-foreground mb-1">
                       {item.name}
                     </h3>
