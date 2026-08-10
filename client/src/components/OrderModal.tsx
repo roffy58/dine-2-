@@ -31,7 +31,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [showDemoPayment, setShowDemoPayment] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
 
-  // ⚡ Stripe payment ke baad redirect होकर aane par order save karne ka logic
+  // ⚡ Stripe payment ke baad redirect होकर aane par order save karne ka logic (Direct cash_received / paid)
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const paymentStatus = queryParams.get("payment");
@@ -168,8 +168,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         if (!res.ok) throw new Error("Order failed");
 
         const savedOrder = await res.json();
-        
-        // ⚡ ASLI FIX: Server se jo exact ID return hoke aayi hai, wahi set karenge
+
+        // ⚡ Server se jo exact ID return hoke aayi hai, wahi set karenge
         if (savedOrder && savedOrder.id) {
           setCurrentOrderId(savedOrder.id);
         } else {
@@ -183,7 +183,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }
     } else {
       setCurrentOrderId(generatedId);
-      // CARD PAYMENT FLOW
+      // CARD PAYMENT FLOW -> ⚡ Direct cash_received / paid update taki owner dashboard par cash pending na dikhe
       const cardOrderData = {
         id: generatedId,
         restaurant_id: RESTAURANT_ID,
@@ -192,9 +192,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         items: cart,
         total: getTotalPrice().toString(),
         notes: `Payment: CARD (Paid) | ${data.notes || ""}`,
-        payment_status: "paid",
-        paymentType: "card",
-        paymentStatus: "paid",
+        payment_status: "cash_received",
+        paymentType: "cash_received",
+        paymentStatus: "cash_received",
+        payment_method: "card",
         status: "pending",
       };
 
@@ -243,9 +244,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         items: cart,
         total: getTotalPrice().toString(),
         notes: `Payment: CARD (Paid) | ${pendingFormData.notes || ""}`,
-        payment_status: "paid",
-        paymentType: "card",
-        paymentStatus: "paid",
+        payment_status: "cash_received",
+        paymentType: "cash_received",
+        paymentStatus: "cash_received",
+        payment_method: "card",
         status: "pending",
       };
 
