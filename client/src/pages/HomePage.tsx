@@ -77,6 +77,7 @@ export default function HomePage() {
         )}
         <div className="p-4 space-y-3">
           <div>
+            {/* Dish name ko theme ke hisaab se hi chhoda hai */}
             <h3 className="text-lg md:text-xl font-medium text-foreground mb-1">
               {item.name}
             </h3>
@@ -138,10 +139,12 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
           <div className="mb-6 space-y-4">
             <div>
-              <h2 className="text-2xl md:text-3xl font-bold font-serif text-foreground mb-2">
+              {/* ⚡ Search Results heading ko white kiya */}
+              <h2 className="text-2xl md:text-3xl font-bold font-serif text-white mb-2">
                 Search Results
               </h2>
-              <p className="text-muted-foreground text-sm md:text-base">
+              {/* ⚡ Search results count text ko white kiya */}
+              <p className="text-white/90 text-sm md:text-base">
                 {hasSearchResults
                   ? `Found items in ${Object.keys(filteredMenu).length} ${selectedCategory ? 'category' : 'categories'}`
                   : "No items found matching your search"}
@@ -155,6 +158,7 @@ export default function HomePage() {
               {Object.entries(filteredMenu).map(([category, items]) => (
                 <div key={category}>
                   <div className="flex items-center gap-3 mb-4">
+                    {/* ⚡ Category titles in search view ko white kiya */}
                     <h3 className="text-xl md:text-2xl font-semibold font-serif text-white">
                       {category}
                     </h3>
@@ -170,7 +174,8 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="text-center py-12" data-testid="no-results">
-              <p className="text-muted-foreground">
+              {/* ⚡ No results text ko white kiya */}
+              <p className="text-white">
                 Try searching with different keywords
               </p>
             </div>
@@ -184,10 +189,12 @@ export default function HomePage() {
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="text-center mb-8 md:mb-12 bg-card/50 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-border">
-          <h2 className="text-4xl md:text-5xl font-bold font-serif text-foreground mb-3 drop-shadow-sm">
+          {/* ⚡ Main "Our Menu" heading ko white kiya */}
+          <h2 className="text-4xl md:text-5xl font-bold font-serif text-white mb-3 drop-shadow-sm">
             Our Menu
           </h2>
-          <p className="text-foreground/80 text-base md:text-lg font-medium">
+          {/* ⚡ Subtitle text ko white kiya */}
+          <p className="text-white/90 text-base md:text-lg font-medium">
             Select a category to explore our delicious offerings
           </p>
         </div>
@@ -218,13 +225,13 @@ export default function HomePage() {
                   alt={category}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/30 group-hover:from-black/60 group-hover:via-black/30 group-hover:to-black/20 transition-all [...]">
-                  
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/30 group-hover:from-black/60 group-hover:via-black/30 group-hover:to-black/20 transition-all"></div>
+
                 <div className="relative h-full flex flex-col items-center justify-center p-6 text-center">
                   <h3 className="text-2xl md:text-3xl font-extrabold text-white mb-2 drop-shadow-[0_4px_12px_rgba(0,0,0,1)] tracking-wide">
                     {category}
                   </h3>
-                  
+
                   <span className="text-base md:text-lg text-white font-bold drop-shadow-[0_2px_8px_rgba(0,0,0,1)] bg-black/30 px-4 py-1 rounded-full backdrop-blur-sm">
                     {itemCount} items
                   </span>
