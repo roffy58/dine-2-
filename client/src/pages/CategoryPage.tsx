@@ -45,7 +45,7 @@ export default function CategoryPage() {
           <Button
             variant="ghost"
             onClick={() => setLocation("/")}
-            className="mb-4"
+            className="mb-4 text-white"
             data-testid="button-back"
           >
             <ArrowLeftIcon className="h-4 w-4 mr-2" />
@@ -53,7 +53,7 @@ export default function CategoryPage() {
           </Button>
 
           <div className="py-4 md:py-6">
-            <h2 className="text-3xl md:text-4xl font-semibold font-serif text-foreground mb-2">
+            <h2 className="text-3xl md:text-4xl font-semibold font-serif text-white mb-2">
               {category}
             </h2>
             <p className="text-sm md:text-base text-muted-foreground">
