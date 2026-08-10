@@ -155,7 +155,7 @@ export default function HomePage() {
               {Object.entries(filteredMenu).map(([category, items]) => (
                 <div key={category}>
                   <div className="flex items-center gap-3 mb-4">
-                    <h3 className="text-xl md:text-2xl font-semibold font-serif text-foreground">
+                    <h3 className="text-xl md:text-2xl font-semibold font-serif text-white">
                       {category}
                     </h3>
                     <Badge variant="secondary" data-testid={`badge-${category.toLowerCase()}`}>
@@ -218,8 +218,8 @@ export default function HomePage() {
                   alt={category}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/30 group-hover:from-black/60 group-hover:via-black/30 group-hover:to-black/20 transition-all duration-300" />
-                
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/30 group-hover:from-black/60 group-hover:via-black/30 group-hover:to-black/20 transition-all [...]">
+                  
                 <div className="relative h-full flex flex-col items-center justify-center p-6 text-center">
                   <h3 className="text-2xl md:text-3xl font-extrabold text-white mb-2 drop-shadow-[0_4px_12px_rgba(0,0,0,1)] tracking-wide">
                     {category}
