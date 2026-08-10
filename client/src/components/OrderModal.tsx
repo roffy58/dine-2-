@@ -88,7 +88,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling to check if owner confirmed the cash payment (Strict Customer Name + Table + Owner Action Check)
+  // Real-time polling to check if owner confirmed the cash payment (Customer Name & Table + Cash Received Match)
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && !orderSuccess) {
@@ -99,7 +99,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             const data = await res.json();
             const ordersList = Array.isArray(data) ? data : data.orders || [];
 
-            // Customer name aur table match ho, aur owner ne explicitly cash confirm kiya ho
+            // Customer name aur table match ho, aur owner ne cash confirm kar diya ho
             const thisOrder = ordersList.find((o: any) => {
               const isCustomerMatch = 
                 String(o.customer_name || "").trim().toLowerCase() === String(pendingFormData?.customerName || "").trim().toLowerCase() &&
@@ -108,13 +108,11 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
               const isOwnerConfirmedCash = (
                 o.payment_status === "cash_received" || 
                 o.paymentStatus === "cash_received" || 
-                o.paymentMethod === "cash_received"
+                o.paymentMethod === "cash_received" ||
+                o.paymentType === "cash_received"
               );
               
-              // Yeh ensure karega ki order create hote waqt hi cash_received na ho (owner ke click ka wait kare)
-              const isNotAlreadyReceived = o.payment_status !== "cash_received" && o.paymentStatus !== "cash_received";
-
-              return isCustomerMatch && isOwnerConfirmedCash && isNotAlreadyReceived;
+              return isCustomerMatch && isOwnerConfirmedCash;
             });
 
             // 🔍 Debugging logs
@@ -131,7 +129,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         } catch (err) {
           console.error("Polling fetch error:", err);
         }
-      }, 2000);
+      }, 1500);
     }
     return () => clearInterval(pollInterval);
   }, [isWaiting, orderSuccess, clearCart, pendingFormData]);
@@ -160,7 +158,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           notes: `Payment: CASH | ${data.notes || ""}`,
           payment_status: "cash_pending",
           paymentType: "cash",
-          paymentStatus: "pending",
+          paymentStatus: "cash_pending",
           status: "pending",
         };
 
