@@ -2,6 +2,15 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { CartItem } from "../types";
 import { MenuItem } from "../data/menu";
 
+interface OrderSnapshot {
+  id: string;
+  items: CartItem[];
+  total: number;
+  paymentType: string;
+  customerName?: string;
+  createdAt: string;
+}
+
 interface CartContextType {
   cart: CartItem[];
   addToCart: (item: MenuItem) => void;
@@ -10,11 +19,15 @@ interface CartContextType {
   clearCart: () => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
+  // New API:
+  lastOrder: OrderSnapshot | null;
+  setLastOrder: (order: OrderSnapshot | null) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const CART_STORAGE_KEY = "restaurant-menu-cart";
+const LAST_ORDER_STORAGE_KEY = "restaurant-last-order";
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -22,9 +35,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [lastOrder, setLastOrder] = useState<OrderSnapshot | null>(() => {
+    const saved = localStorage.getItem(LAST_ORDER_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  });
+
   useEffect(() => {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
   }, [cart]);
+
+  useEffect(() => {
+    if (lastOrder) {
+      localStorage.setItem(LAST_ORDER_STORAGE_KEY, JSON.stringify(lastOrder));
+    } else {
+      localStorage.removeItem(LAST_ORDER_STORAGE_KEY);
+    }
+  }, [lastOrder]);
 
   const addToCart = (item: MenuItem) => {
     setCart((prev) => {
@@ -76,6 +102,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         clearCart,
         getTotalItems,
         getTotalPrice,
+        lastOrder,
+        setLastOrder,
       }}
     >
       {children}
