@@ -297,10 +297,27 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             <p className="text-gray-600">Complete payment within:</p>
             <div className="text-4xl font-mono font-bold text-black">{timer}s</div>
             <p className="text-sm text-gray-500 animate-pulse">Waiting for owner to confirm cash...</p>
-            <Button variant="outline" className="w-full mt-2" onClick={() => {
-              setIsWaiting(false);
-              onClose();
-            }}>Cancel Order</Button>
+            <Button 
+              variant="outline" 
+              className="w-full mt-2" 
+              onClick={async () => {
+                if (currentOrderId) {
+                  try {
+                    await fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ status: "cancelled", payment_status: "user_cancelled" }),
+                    });
+                  } catch (err) {
+                    console.error("Manual cancel error:", err);
+                  }
+                }
+                setIsWaiting(false);
+                onClose();
+              }}
+            >
+              Cancel Order
+            </Button>
           </div>
         ) : (
           <Form {...form}>
