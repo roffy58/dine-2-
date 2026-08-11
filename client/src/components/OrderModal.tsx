@@ -30,8 +30,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [showDemoPayment, setShowDemoPayment] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
-  
-  // ⚡ Saved bill details store karne ke liye taaki cart clear hone ke baad bhi data rahe
   const [successBillData, setSuccessBillData] = useState<any>(null);
 
   // Stripe redirect success handler
@@ -44,7 +42,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       if (rawPending) {
         const pendingOrder = JSON.parse(rawPending);
         
-        // ⚡ Bill data set kar diya localStorage se direkt uthakar
         setSuccessBillData({
           customerName: pendingOrder.customer_name,
           tableNumber: pendingOrder.table_no,
@@ -122,7 +119,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             });
 
             if (thisOrder) {
-              // ⚡ Cash confirm hote hi local storage ya saved state se bill data set kar do
               const rawPending = localStorage.getItem("pending_order");
               if (rawPending) {
                 const parsed = JSON.parse(rawPending);
@@ -175,7 +171,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       status: "pending",
     };
 
-    // ⚡ Order place hote hi local storage mein save kar lo taaki bill data safe rahe
     localStorage.setItem("pending_order", JSON.stringify(orderPayload));
 
     if (paymentType === "cash") {
@@ -264,24 +259,26 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
   return (
     <>
-      {/* ⚡ SuccessScreen jiska z-index sabse upar hai taaki sabse front me dikhe */}
-      <div className="fixed inset-0 z-[9999]">
-        <SuccessScreen 
-          isOpen={orderSuccess} 
-          onClose={() => { 
-            setOrderSuccess(false); 
-            onSuccess(); 
-            onClose(); 
-          }} 
-          orderData={successBillData || {
-            customerName: pendingFormData?.customerName,
-            tableNumber: pendingFormData?.tableNumber,
-            items: cart,
-            total: getTotalPrice(),
-            paymentType: paymentType || "cash"
-          }}
-        />
-      </div>
+      {/* ⚡ Jab orderSuccess true hoga, tabhi SuccessScreen render hogi aur sabse front me dikhegi */}
+      {orderSuccess && (
+        <div className="fixed inset-0 z-[9999]">
+          <SuccessScreen 
+            isOpen={orderSuccess} 
+            onClose={() => { 
+              setOrderSuccess(false); 
+              onSuccess(); 
+              onClose(); 
+            }} 
+            orderData={successBillData || {
+              customerName: pendingFormData?.customerName,
+              tableNumber: pendingFormData?.tableNumber,
+              items: cart,
+              total: getTotalPrice(),
+              paymentType: paymentType || "cash"
+            }}
+          />
+        </div>
+      )}
 
       <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
         <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
