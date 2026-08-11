@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
@@ -13,7 +13,7 @@ import { SuccessScreen } from "./SuccessScreen";
 const STRIPE_PUBLIC_KEY = "pk_test_51U18Cy4FIpQmXqDsaMjQGP4nmoHEL3zLqZgj0GlGSbXj2HjkpgkrbCcTGHrmh70p0XLSxUDtW1xjHexKH0fzwHlQ00HCj7cjee";
 const BACKEND_URL = "https://nevolt-backend.onrender.com";
 const RESTAURANT_ID = "res-1";
-const RESTAURANT_NAME = "Nevolt"; // PDF/Download name ke liye
+const RESTAURANT_NAME = "Nevolt";
 const getStripe = () => loadStripe(STRIPE_PUBLIC_KEY);
 
 interface OrderModalProps {
@@ -32,19 +32,22 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [showDemoPayment, setShowDemoPayment] = useState(false);
   const [successBillData, setSuccessBillData] = useState<any>(null);
 
-  // Stripe redirect success handler
+  // Stripe redirect success handler (Secured with sessionStorage flag to avoid double execution)
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const paymentStatus = queryParams.get("payment");
 
     if (paymentStatus === "success") {
+      const alreadyProcessed = sessionStorage.getItem("stripe_success_processed");
+      if (alreadyProcessed === "true") return;
+
       const rawPending = localStorage.getItem("pending_order");
       if (rawPending) {
+        sessionStorage.setItem("stripe_success_processed", "true");
         const pendingOrder = JSON.parse(rawPending);
-        
-        // ⚡ Safely populate bill data from pending order including ID
+
         setSuccessBillData({
-          orderId: pendingOrder.id,
+          id: pendingOrder.id,
           customerName: pendingOrder.customer_name,
           tableNumber: pendingOrder.table_no,
           items: pendingOrder.items,
@@ -64,11 +67,13 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           .then(() => {
             toast.success("Payment Successful & Order Placed!");
             clearCart();
+            localStorage.removeItem("pending_order");
             setOrderSuccess(true);
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch((err) => {
             console.error("Save order error:", err);
+            sessionStorage.removeItem("stripe_success_processed");
             toast.error("Payment was successful, but failed to save order on server!");
           });
       }
@@ -124,7 +129,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
               if (rawPending) {
                 const parsed = JSON.parse(rawPending);
                 setSuccessBillData({
-                  orderId: parsed.id,
+                  id: parsed.id,
                   customerName: parsed.customer_name,
                   tableNumber: parsed.table_no,
                   items: parsed.items,
@@ -176,9 +181,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
     localStorage.setItem("pending_order", JSON.stringify(orderPayload));
 
-    // ⚡ Save complete snapshot in state so SuccessScreen never gets empty/fallback data
     setSuccessBillData({
-      orderId: generatedId,
+      id: generatedId,
       customerName: data.customerName,
       tableNumber: data.tableNumber,
       items: currentItems,
@@ -199,10 +203,9 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         const savedOrder = await res.json();
         const finalId = savedOrder?.id || generatedId;
         setCurrentOrderId(finalId);
-        
-        // Update bill data ID if backend changed it
-        setSuccessBillData((prev: any) => prev ? { ...prev, orderId: finalId } : prev);
-        
+
+        setSuccessBillData((prev: any) => prev ? { ...prev, id: finalId } : prev);
+
         setIsWaiting(true);
         setTimer(60);
       } catch (e) {
@@ -256,7 +259,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       if (!res.ok) throw new Error("Failed to save card order");
 
       setSuccessBillData({
-        orderId: pendingOrder.id,
+        id: pendingOrder.id,
         customerName: pendingOrder.customer_name,
         tableNumber: pendingOrder.table_no,
         items: pendingOrder.items,
@@ -285,11 +288,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         <div className="fixed inset-0 z-[9999]">
           <SuccessScreen 
             isOpen={orderSuccess} 
-            restaurantName={RESTAURANT_NAME} // ⚡ Pass restaurant name for custom file naming & title
+            restaurantName={RESTAURANT_NAME} 
             onClose={() => { 
               setOrderSuccess(false); 
               setSuccessBillData(null);
               localStorage.removeItem("pending_order");
+              sessionStorage.removeItem("stripe_success_processed");
               onSuccess(); 
               onClose(); 
             }} 
