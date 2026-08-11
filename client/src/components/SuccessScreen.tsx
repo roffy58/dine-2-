@@ -1,11 +1,16 @@
+import { useRef } from "react";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import html2canvas from "html2canvas";
+import toast from "react-hot-toast";
 
 interface SuccessScreenProps {
   isOpen: boolean;
   onClose: () => void;
+  restaurantName?: string;
   orderData?: {
+    Id?: string | number;
     customerName?: string;
     tableNumber?: string;
     items?: Array<{ name: string; quantity: number; price: number }>;
@@ -14,8 +19,26 @@ interface SuccessScreenProps {
   };
 }
 
-export function SuccessScreen({ isOpen, onClose, orderData }: SuccessScreenProps) {
+export function SuccessScreen({ isOpen, onClose, restaurantName = "Nevolt", orderData }: SuccessScreenProps) {
+  const billRef = useRef<HTMLDivElement>(null);
+
   if (!isOpen) return null;
+
+  const handleDownloadBill = async () => {
+    if (!billRef.current) return;
+    try {
+      const canvas = await html2canvas(billRef.current, { scale: 2, backgroundColor: "#ffffff" });
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = image;
+      link.download = `${restaurantName.replace(/\s+/g, "-")}-Bill.png`;
+      link.click();
+      toast.success("Bill downloaded successfully!");
+    } catch (err) {
+      console.error("Download bill error:", err);
+      toast.error("Failed to download bill");
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -36,14 +59,21 @@ export function SuccessScreen({ isOpen, onClose, orderData }: SuccessScreenProps
             </p>
           </div>
 
-          {/* 🧾 Digital Bill Box */}
-          <div className="bg-muted/50 border border-border rounded-lg p-4 text-left text-sm space-y-2 text-foreground">
-            <div className="text-center font-bold text-base border-b pb-2 mb-2">NEVOLT - Digital Bill</div>
+          {/* 🧾 Digital Bill Box (Ref attached for clean bill-only download) */}
+          <div ref={billRef} className="bg-white border border-border rounded-lg p-4 text-left text-sm space-y-2 text-foreground">
+            <div className="text-center font-bold text-base border-b pb-2 mb-2">{restaurantName.toUpperCase()} - Digital Bill</div>
+            
+            {orderData?.orderId && (
+              <div className="flex justify-between text-xs text-gray-500 border-b pb-1">
+                <span>Order ID:</span> <span className="font-mono font-medium">{orderData.orderId}</span>
+              </div>
+            )}
+
             <div className="flex justify-between"><span>Customer:</span> <span className="font-medium">{orderData?.customerName || "Guest"}</span></div>
             <div className="flex justify-between"><span>Table No:</span> <span className="font-medium">{orderData?.tableNumber || "-"}</span></div>
             <div className="flex justify-between"><span>Payment Type:</span> <span className="font-medium uppercase">{orderData?.paymentType || "Cash"}</span></div>
             <div className="flex justify-between"><span>Time:</span> <span className="font-medium">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
-            
+
             <div className="border-t pt-2 mt-2">
               <div className="font-semibold mb-1">Dishes:</div>
               {orderData?.items && orderData.items.length > 0 ? (
@@ -70,7 +100,7 @@ export function SuccessScreen({ isOpen, onClose, orderData }: SuccessScreenProps
               variant="outline"
               size="lg"
               className="w-1/2"
-              onClick={() => window.print()}
+              onClick={handleDownloadBill}
             >
               Download Bill
             </Button>
