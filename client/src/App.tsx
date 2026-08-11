@@ -12,7 +12,7 @@ import { SuccessScreen } from "./components/SuccessScreen";
 import { BackgroundSlideshow } from "./components/BackgroundSlideshow";
 import HomePage from "./pages/HomePage";
 import CategoryPage from "./pages/CategoryPage";
-import { useState } from "react";,
+import { useState } from "react";
 
 function Router() {
   return (
