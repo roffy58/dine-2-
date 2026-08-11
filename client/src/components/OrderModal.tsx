@@ -32,7 +32,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
   const [successBillData, setSuccessBillData] = useState<any>(null);
 
-  // ⚡ Stripe redirect success handler (Component mount hote hi check karega aur modal khol dega)
+  // Stripe redirect success handler
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const paymentStatus = queryParams.get("payment");
@@ -42,6 +42,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       if (rawPending) {
         const pendingOrder = JSON.parse(rawPending);
         
+        // ⚡ Ensure proper data is mapped for the bill
         setSuccessBillData({
           customerName: pendingOrder.customer_name,
           tableNumber: pendingOrder.table_no,
@@ -62,8 +63,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           .then(() => {
             toast.success("Payment Successful & Order Placed!");
             clearCart();
-            localStorage.removeItem("pending_order"); // Purana pending order turant clear kar diya
-            setOrderSuccess(true); // Success screen turant trigger hogi
+            setOrderSuccess(true);
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch((err) => {
@@ -134,7 +134,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
               setOrderSuccess(true);
               setIsWaiting(false);
               clearCart();
-              localStorage.removeItem("pending_order"); // Clean up
+              localStorage.removeItem("pending_order");
               toast.success("Cash payment verified by owner!");
             }
           }
@@ -157,13 +157,17 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     const generatedId = Date.now().toString();
     setPendingFormData(data);
 
+    // ⚡ Save current snapshot of cart and form data before clearing
+    const currentItems = [...cart];
+    const currentTotal = getTotalPrice();
+
     const orderPayload = {
       id: generatedId,
       restaurant_id: RESTAURANT_ID,
       table_no: String(data.tableNumber),
       customer_name: String(data.customerName),
-      items: cart,
-      total: getTotalPrice().toString(),
+      items: currentItems,
+      total: currentTotal.toString(),
       notes: `Payment: ${paymentType.toUpperCase()} | ${data.notes || ""}`,
       payment_status: paymentType === "cash" ? "cash_pending" : "cash_received",
       paymentType: paymentType === "cash" ? "cash" : "cash_received",
@@ -172,6 +176,15 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     };
 
     localStorage.setItem("pending_order", JSON.stringify(orderPayload));
+
+    // Store bill data immediately so it's ready when success triggers
+    setSuccessBillData({
+      customerName: data.customerName,
+      tableNumber: data.tableNumber,
+      items: currentItems,
+      total: currentTotal,
+      paymentType: paymentType
+    });
 
     if (paymentType === "cash") {
       try {
@@ -197,8 +210,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            items: cart,
-            total: getTotalPrice(),
+            items: currentItems,
+            total: currentTotal,
             orderId: generatedId,
             tableNo: data.tableNumber,
             customerName: data.customerName,
@@ -248,14 +261,13 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       setOrderSuccess(true);
       setShowDemoPayment(false);
       clearCart();
-      localStorage.removeItem("pending_order"); // Clean up
+      localStorage.removeItem("pending_order");
       toast.success("Payment Successful & Order Placed!");
     } catch (e) {
       toast.error("Payment successful but failed to place order on server");
     }
   };
 
-  // ⚡ Agar stripe payment successful ho gaya hai, toh chahe parent se isOpen false bhi ho, modal ko force open rakhna hai taaki bill dikh sake
   const queryParams = new URLSearchParams(window.location.search);
   const isStripeRedirectSuccess = queryParams.get("payment") === "success";
 
@@ -263,30 +275,22 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
   return (
     <>
-      {/* ⚡ SuccessScreen jiska z-index sabse upar hai aur orderSuccess hone par bill show karegi */}
       {orderSuccess && (
         <div className="fixed inset-0 z-[9999]">
           <SuccessScreen 
             isOpen={orderSuccess} 
             onClose={() => { 
               setOrderSuccess(false); 
-              setSuccessBillData(null); // Bill data clear kar do taaki dobara khulne par purana bill na aaye
+              setSuccessBillData(null);
               localStorage.removeItem("pending_order");
               onSuccess(); 
               onClose(); 
             }} 
-            orderData={successBillData || {
-              customerName: pendingFormData?.customerName,
-              tableNumber: pendingFormData?.tableNumber,
-              items: cart,
-              total: getTotalPrice(),
-              paymentType: paymentType || "cash"
-            }}
+            orderData={successBillData}
           />
         </div>
       )}
 
-      {/* Normal Modal form (Agar order success nahi hua hai tabhi dikhega) */}
       {!orderSuccess && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
