@@ -32,7 +32,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
   const [successBillData, setSuccessBillData] = useState<any>(null);
 
-  // Stripe redirect success handler
+  // ⚡ Stripe redirect success handler (Component mount hote hi check karega aur modal khol dega)
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const paymentStatus = queryParams.get("payment");
@@ -62,8 +62,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
           .then(() => {
             toast.success("Payment Successful & Order Placed!");
             clearCart();
-            localStorage.removeItem("pending_order");
-            setOrderSuccess(true);
+            localStorage.removeItem("pending_order"); // Purana pending order turant clear kar diya
+            setOrderSuccess(true); // Success screen turant trigger hogi
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch((err) => {
@@ -134,7 +134,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
               setOrderSuccess(true);
               setIsWaiting(false);
               clearCart();
-              localStorage.removeItem("pending_order");
+              localStorage.removeItem("pending_order"); // Clean up
               toast.success("Cash payment verified by owner!");
             }
           }
@@ -248,24 +248,30 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       setOrderSuccess(true);
       setShowDemoPayment(false);
       clearCart();
-      localStorage.removeItem("pending_order");
+      localStorage.removeItem("pending_order"); // Clean up
       toast.success("Payment Successful & Order Placed!");
     } catch (e) {
       toast.error("Payment successful but failed to place order on server");
     }
   };
 
-  if (!isOpen) return null;
+  // ⚡ Agar stripe payment successful ho gaya hai, toh chahe parent se isOpen false bhi ho, modal ko force open rakhna hai taaki bill dikh sake
+  const queryParams = new URLSearchParams(window.location.search);
+  const isStripeRedirectSuccess = queryParams.get("payment") === "success";
+
+  if (!isOpen && !orderSuccess && !isStripeRedirectSuccess) return null;
 
   return (
     <>
-      {/* ⚡ Jab orderSuccess true hoga, tabhi SuccessScreen render hogi aur sabse front me dikhegi */}
+      {/* ⚡ SuccessScreen jiska z-index sabse upar hai aur orderSuccess hone par bill show karegi */}
       {orderSuccess && (
         <div className="fixed inset-0 z-[9999]">
           <SuccessScreen 
             isOpen={orderSuccess} 
             onClose={() => { 
               setOrderSuccess(false); 
+              setSuccessBillData(null); // Bill data clear kar do taaki dobara khulne par purana bill na aaye
+              localStorage.removeItem("pending_order");
               onSuccess(); 
               onClose(); 
             }} 
@@ -280,62 +286,65 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         </div>
       )}
 
-      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
-          {showDemoPayment ? (
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold">Stripe Test Payment</h2>
-              <p className="text-xs text-gray-500">Enter test card details to simulate payment:</p>
-              <Input placeholder="Card Number (4242 4242...)" />
-              <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleDemoCardPaymentSuccess}>
-                Pay ₹{getTotalPrice()} & Confirm Order
-              </Button>
-              <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
-            </div>
-          ) : isWaiting ? (
-            <div className="text-center py-6 space-y-4">
-              <h2 className="text-2xl font-bold text-amber-600">Give cash to the owner</h2>
-              <p className="text-gray-600">Complete payment within:</p>
-              <div className="text-4xl font-mono font-bold text-black">{timer}s</div>
-              <p className="text-sm text-gray-500 animate-pulse">Waiting for owner to confirm cash...</p>
-              <Button 
-                variant="outline" 
-                className="w-full mt-2" 
-                onClick={async () => {
-                  if (currentOrderId) {
-                    try {
-                      await fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ status: "cancelled", payment_status: "user_cancelled" }),
-                      });
-                    } catch (err) {
-                      console.error("Manual cancel error:", err);
+      {/* Normal Modal form (Agar order success nahi hua hai tabhi dikhega) */}
+      {!orderSuccess && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
+            {showDemoPayment ? (
+              <div className="space-y-4">
+                <h2 className="text-xl font-bold">Stripe Test Payment</h2>
+                <p className="text-xs text-gray-500">Enter test card details to simulate payment:</p>
+                <Input placeholder="Card Number (4242 4242...)" />
+                <div className="flex gap-2"> <Input placeholder="MM/YY" /> <Input placeholder="CVC" /> </div>
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleDemoCardPaymentSuccess}>
+                  Pay ₹{getTotalPrice()} & Confirm Order
+                </Button>
+                <Button variant="ghost" className="w-full" onClick={() => setShowDemoPayment(false)}>Back</Button>
+              </div>
+            ) : isWaiting ? (
+              <div className="text-center py-6 space-y-4">
+                <h2 className="text-2xl font-bold text-amber-600">Give cash to the owner</h2>
+                <p className="text-gray-600">Complete payment within:</p>
+                <div className="text-4xl font-mono font-bold text-black">{timer}s</div>
+                <p className="text-sm text-gray-500 animate-pulse">Waiting for owner to confirm cash...</p>
+                <Button 
+                  variant="outline" 
+                  className="w-full mt-2" 
+                  onClick={async () => {
+                    if (currentOrderId) {
+                      try {
+                        await fetch(`${BACKEND_URL}/api/orders/${currentOrderId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ status: "cancelled", payment_status: "user_cancelled" }),
+                        });
+                      } catch (err) {
+                        console.error("Manual cancel error:", err);
+                      }
                     }
-                  }
-                  setIsWaiting(false);
-                  onClose();
-                }}
-              >
-                Cancel Order
-              </Button>
-            </div>
-          ) : (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="flex gap-2">
-                  <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card</Button>
-                  <Button type="button" variant={paymentType === "cash" ? "default" : "outline"} onClick={() => setPaymentType("cash")} className="flex-1">Cash</Button>
-                </div>
-                <FormField control={form.control} name="tableNumber" render={({field}) => <FormItem><FormLabel>Table No</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
-                <FormField control={form.control} name="customerName" render={({field}) => <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
-                <Button type="submit" className="w-full">Proceed to Pay</Button>
-              </form>
-            </Form>
-          )}
+                    setIsWaiting(false);
+                    onClose();
+                  }}
+                >
+                  Cancel Order
+                </Button>
+              </div>
+            ) : (
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <div className="flex gap-2">
+                    <Button type="button" variant={paymentType === "card" ? "default" : "outline"} onClick={() => setPaymentType("card")} className="flex-1">Card</Button>
+                    <Button type="button" variant={paymentType === "cash" ? "default" : "outline"} onClick={() => setPaymentType("cash")} className="flex-1">Cash</Button>
+                  </div>
+                  <FormField control={form.control} name="tableNumber" render={({field}) => <FormItem><FormLabel>Table No</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
+                  <FormField control={form.control} name="customerName" render={({field}) => <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>} />
+                  <Button type="submit" className="w-full">Proceed to Pay</Button>
+                </form>
+              </Form>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
