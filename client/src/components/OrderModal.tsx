@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useCart } from "../contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl } from "@/components/ui/form";
@@ -33,7 +33,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     if (!paymentType) { toast.error("Select a payment method!"); return; }
 
     try {
-      // FIX: Yahan data ko explicitly string mein convert kiya taaki Zod validation pass ho
+      // Yahan data ko explicitly string mein convert kiya taaki Zod validation pass ho
       const newOrder = {
         table_no: String(data.tableNumber),
         customer_name: String(data.customerName),
@@ -57,6 +57,24 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       if (paymentType === "cash") {
         setIsWaiting(true);
       } else if (STRIPE_PUBLIC_KEY.startsWith("pk_test_") && STRIPE_PUBLIC_KEY !== "pk_test_dummy") {
+        // persist pending order so we can resume after Stripe redirect
+        const pendingOrder = {
+          table_no: String(data.tableNumber),
+          customer_name: String(data.customerName) || "Guest",
+          items: cart,
+          total: getTotalPrice(),
+          notes: data.notes || "",
+          paymentType: paymentType,
+          paymentStatus: paymentType === "card" ? "paid" : "pending",
+          status: "pending",
+          timestamp: Date.now(),
+        };
+        try {
+          localStorage.setItem("pending_order", JSON.stringify(pendingOrder));
+        } catch (err) {
+          console.warn("Failed to persist pending_order", err);
+        }
+
         const sessionRes = await fetch("/api/create-checkout-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

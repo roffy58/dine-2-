@@ -13,6 +13,7 @@ import { BackgroundSlideshow } from "./components/BackgroundSlideshow";
 import HomePage from "./pages/HomePage";
 import CategoryPage from "./pages/CategoryPage";
 import { useState } from "react";
+import { OrderSuccessHandler } from "./components/OrderSuccessHandler";
 
 function Router() {
   return (
@@ -53,6 +54,7 @@ function App() {
                 onClose={() => setIsOrderModalOpen(false)}
                 onSuccess={handleOrderSuccess}
               />
+              <OrderSuccessHandler onSuccessOpen={handleOrderSuccess} />
               <SuccessScreen
                 isOpen={isSuccessScreenOpen}
                 onClose={handleSuccessClose}
