@@ -32,7 +32,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [showDemoPayment, setShowDemoPayment] = useState(false);
   const [successBillData, setSuccessBillData] = useState<any>(null);
 
-  // Stripe redirect success handler
+  // Stripe se wapas aane par yhi component asli bill banayega aur save karega
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const paymentStatus = queryParams.get("payment");
@@ -43,46 +43,52 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
       const rawPending = localStorage.getItem("pending_order");
       if (rawPending) {
-        sessionStorage.setItem("stripe_success_processed", "true");
-        const pendingOrder = JSON.parse(rawPending);
+        try {
+          const pendingOrder = JSON.parse(rawPending);
+          if (!pendingOrder || !pendingOrder.items || pendingOrder.items.length === 0) return;
 
-        // Pehle data set karo taaki SuccessScreen ko kabhi empty data na mile
-        setSuccessBillData({
-          id: pendingOrder.id,
-          customerName: pendingOrder.customer_name || "Guest",
-          tableNumber: pendingOrder.table_no || "-",
-          items: pendingOrder.items || [],
-          total: pendingOrder.total || 0,
-          paymentType: "card"
-        });
+          sessionStorage.setItem("stripe_success_processed", "true");
 
-        fetch(`${BACKEND_URL}/api/orders`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(pendingOrder),
-        })
-          .then(async (res) => {
-            if (!res.ok) throw new Error("Failed to save order");
-            return res.json();
-          })
-          .then(() => {
-            toast.success("Payment Successful & Order Placed!");
-            clearCart();
-            localStorage.removeItem("pending_order");
-            setOrderSuccess(true); // Ab state true hogi, tabhi SuccessScreen dikhega
-            window.history.replaceState({}, document.title, window.location.pathname);
-          })
-          .catch((err) => {
-            console.error("Save order error:", err);
-            sessionStorage.removeItem("stripe_success_processed");
-            setSuccessBillData(null);
-            toast.error("Payment was successful, but failed to save order on server!");
+          // Asli bill data set kiya
+          setSuccessBillData({
+            id: pendingOrder.id,
+            customerName: pendingOrder.customer_name || "Guest",
+            tableNumber: pendingOrder.table_no || "-",
+            items: pendingOrder.items,
+            total: pendingOrder.total,
+            paymentType: "card"
           });
+
+          fetch(`${BACKEND_URL}/api/orders`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(pendingOrder),
+          })
+            .then(async (res) => {
+              if (!res.ok) throw new Error("Failed to save order");
+              return res.json();
+            })
+            .then(() => {
+              toast.success("Payment Successful & Order Placed!");
+              clearCart();
+              localStorage.removeItem("pending_order");
+              setOrderSuccess(true);
+              window.history.replaceState({}, document.title, window.location.pathname);
+            })
+            .catch((err) => {
+              console.error("Save order error:", err);
+              sessionStorage.removeItem("stripe_success_processed");
+              setSuccessBillData(null);
+              toast.error("Payment was successful, but failed to save order on server!");
+            });
+        } catch (e) {
+          console.error("Error parsing pending order:", e);
+        }
       }
     }
   }, [clearCart]);
 
-  // Timer countdown
+  // Timer countdown for cash payment
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isWaiting && !orderSuccess && timer > 0) {
@@ -279,8 +285,12 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     }
   };
 
-  // ⚡ FIX: Sirf tabhi SuccessScreen dikhao jab orderSuccess true ho AUR successBillData valid ho
-  if (orderSuccess && successBillData && successBillData.total > 0) {
+  const hasValidData = successBillData && 
+                       successBillData.items && 
+                       successBillData.items.length > 0 && 
+                       Number(successBillData.total) > 0;
+
+  if (orderSuccess && hasValidData) {
     return (
       <div className="fixed inset-0 z-[9999]">
         <SuccessScreen 
@@ -300,7 +310,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     );
   }
 
-  // Agar modal open nahi hai aur order success bhi nahi hai, toh kuch mat dikhao
   if (!isOpen) return null;
 
   return (
