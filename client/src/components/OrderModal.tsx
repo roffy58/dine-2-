@@ -32,7 +32,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [showDemoPayment, setShowDemoPayment] = useState(false);
   const [successBillData, setSuccessBillData] = useState<any>(null);
 
-  // Stripe redirect success handler (Secured with sessionStorage flag and instant return)
+  // Stripe redirect success handler
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const paymentStatus = queryParams.get("payment");
@@ -46,12 +46,13 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
         sessionStorage.setItem("stripe_success_processed", "true");
         const pendingOrder = JSON.parse(rawPending);
 
+        // Pehle data set karo taaki SuccessScreen ko kabhi empty data na mile
         setSuccessBillData({
           id: pendingOrder.id,
-          customerName: pendingOrder.customer_name,
-          tableNumber: pendingOrder.table_no,
-          items: pendingOrder.items,
-          total: pendingOrder.total,
+          customerName: pendingOrder.customer_name || "Guest",
+          tableNumber: pendingOrder.table_no || "-",
+          items: pendingOrder.items || [],
+          total: pendingOrder.total || 0,
           paymentType: "card"
         });
 
@@ -68,12 +69,13 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             toast.success("Payment Successful & Order Placed!");
             clearCart();
             localStorage.removeItem("pending_order");
-            setOrderSuccess(true);
+            setOrderSuccess(true); // Ab state true hogi, tabhi SuccessScreen dikhega
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch((err) => {
             console.error("Save order error:", err);
             sessionStorage.removeItem("stripe_success_processed");
+            setSuccessBillData(null);
             toast.error("Payment was successful, but failed to save order on server!");
           });
       }
@@ -130,10 +132,10 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
                 const parsed = JSON.parse(rawPending);
                 setSuccessBillData({
                   id: parsed.id,
-                  customerName: parsed.customer_name,
-                  tableNumber: parsed.table_no,
-                  items: parsed.items,
-                  total: parsed.total,
+                  customerName: parsed.customer_name || "Guest",
+                  tableNumber: parsed.table_no || "-",
+                  items: parsed.items || [],
+                  total: parsed.total || 0,
                   paymentType: "cash"
                 });
               }
@@ -277,8 +279,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     }
   };
 
-  // ⚡ FIX: Strict conditional rendering isolation for Success state
-  if (orderSuccess) {
+  // ⚡ FIX: Sirf tabhi SuccessScreen dikhao jab orderSuccess true ho AUR successBillData valid ho
+  if (orderSuccess && successBillData && successBillData.total > 0) {
     return (
       <div className="fixed inset-0 z-[9999]">
         <SuccessScreen 
@@ -298,10 +300,8 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     );
   }
 
-  const queryParams = new URLSearchParams(window.location.search);
-  const isStripeRedirectSuccess = queryParams.get("payment") === "success";
-
-  if (!isOpen && !isStripeRedirectSuccess) return null;
+  // Agar modal open nahi hai aur order success bhi nahi hai, toh kuch mat dikhao
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
