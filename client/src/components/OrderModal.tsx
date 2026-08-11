@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { orderFormSchema, type OrderFormData } from "../schemas/orderSchema";
 import toast from "react-hot-toast";
 import { loadStripe } from "@stripe/stripe-js";
-import { SuccessScreen } from "./SuccessScreen"; // ⚡ SuccessScreen import kiya
+import { SuccessScreen } from "./SuccessScreen";
 
 const STRIPE_PUBLIC_KEY = "pk_test_51U18Cy4FIpQmXqDsaMjQGP4nmoHEL3zLqZgj0GlGSbXj2HjkpgkrbCcTGHrmh70p0XLSxUDtW1xjHexKH0fzwHlQ00HCj7cjee";
 const BACKEND_URL = "https://nevolt-backend.onrender.com";
@@ -30,8 +30,11 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [showDemoPayment, setShowDemoPayment] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<OrderFormData | null>(null);
+  
+  // ⚡ Saved bill details store karne ke liye taaki cart clear hone ke baad bhi data rahe
+  const [successBillData, setSuccessBillData] = useState<any>(null);
 
-  // ⚡ Stripe payment ke baad redirect hokar aane par order save karne ka logic
+  // Stripe redirect success handler
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const paymentStatus = queryParams.get("payment");
@@ -41,13 +44,14 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       if (rawPending) {
         const pendingOrder = JSON.parse(rawPending);
         
-        // Form data ko state mein restore kar rahe hain taaki bill mein dikh sake
-        setPendingFormData({
-          tableNumber: pendingOrder.table_no,
+        // ⚡ Bill data set kar diya localStorage se direkt uthakar
+        setSuccessBillData({
           customerName: pendingOrder.customer_name,
-          notes: pendingOrder.notes
+          tableNumber: pendingOrder.table_no,
+          items: pendingOrder.items,
+          total: pendingOrder.total,
+          paymentType: "card"
         });
-        setPaymentType("card");
 
         fetch(`${BACKEND_URL}/api/orders`, {
           method: "POST",
@@ -62,7 +66,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             toast.success("Payment Successful & Order Placed!");
             clearCart();
             localStorage.removeItem("pending_order");
-            setOrderSuccess(true); // ⚡ Success screen trigger hogi
+            setOrderSuccess(true);
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch((err) => {
@@ -73,7 +77,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     }
   }, [clearCart]);
 
-  // 1-minute countdown timer for cash timeout
+  // Timer countdown
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isWaiting && !orderSuccess && timer > 0) {
@@ -95,7 +99,7 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     return () => clearInterval(interval);
   }, [isWaiting, timer, orderSuccess, currentOrderId, onClose]);
 
-  // Real-time polling for cash confirmation by owner
+  // Polling for cash confirmation
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     if (isWaiting && !orderSuccess && currentOrderId) {
@@ -118,9 +122,23 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
             });
 
             if (thisOrder) {
-              setOrderSuccess(true); // ⚡ Cash confirm hote hi success screen khul jayegi
+              // ⚡ Cash confirm hote hi local storage ya saved state se bill data set kar do
+              const rawPending = localStorage.getItem("pending_order");
+              if (rawPending) {
+                const parsed = JSON.parse(rawPending);
+                setSuccessBillData({
+                  customerName: parsed.customer_name,
+                  tableNumber: parsed.table_no,
+                  items: parsed.items,
+                  total: parsed.total,
+                  paymentType: "cash"
+                });
+              }
+
+              setOrderSuccess(true);
               setIsWaiting(false);
               clearCart();
+              localStorage.removeItem("pending_order");
               toast.success("Cash payment verified by owner!");
             }
           }
@@ -143,37 +161,35 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
     const generatedId = Date.now().toString();
     setPendingFormData(data);
 
+    const orderPayload = {
+      id: generatedId,
+      restaurant_id: RESTAURANT_ID,
+      table_no: String(data.tableNumber),
+      customer_name: String(data.customerName),
+      items: cart,
+      total: getTotalPrice().toString(),
+      notes: `Payment: ${paymentType.toUpperCase()} | ${data.notes || ""}`,
+      payment_status: paymentType === "cash" ? "cash_pending" : "cash_received",
+      paymentType: paymentType === "cash" ? "cash" : "cash_received",
+      paymentStatus: paymentType === "cash" ? "cash_pending" : "cash_received",
+      status: "pending",
+    };
+
+    // ⚡ Order place hote hi local storage mein save kar lo taaki bill data safe rahe
+    localStorage.setItem("pending_order", JSON.stringify(orderPayload));
+
     if (paymentType === "cash") {
       try {
-        const newOrder = {
-          id: generatedId,
-          restaurant_id: RESTAURANT_ID,
-          table_no: String(data.tableNumber),
-          customer_name: String(data.customerName),
-          items: cart,
-          total: getTotalPrice().toString(),
-          notes: `Payment: CASH | ${data.notes || ""}`,
-          payment_status: "cash_pending",
-          paymentType: "cash",
-          paymentStatus: "cash_pending",
-          status: "pending",
-        };
-
         const res = await fetch(`${BACKEND_URL}/api/orders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newOrder),
+          body: JSON.stringify(orderPayload),
         });
 
         if (!res.ok) throw new Error("Order failed");
 
         const savedOrder = await res.json();
-        if (savedOrder && savedOrder.id) {
-          setCurrentOrderId(savedOrder.id);
-        } else {
-          setCurrentOrderId(generatedId);
-        }
-
+        setCurrentOrderId(savedOrder?.id || generatedId);
         setIsWaiting(true);
         setTimer(60);
       } catch (e) {
@@ -181,23 +197,6 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
       }
     } else {
       setCurrentOrderId(generatedId);
-      const cardOrderData = {
-        id: generatedId,
-        restaurant_id: RESTAURANT_ID,
-        table_no: String(data.tableNumber),
-        customer_name: String(data.customerName),
-        items: cart,
-        total: getTotalPrice().toString(),
-        notes: `Payment: CARD (Paid) | ${data.notes || ""}`,
-        payment_status: "cash_received",
-        paymentType: "cash_received",
-        paymentStatus: "cash_received",
-        payment_method: "card",
-        status: "pending",
-      };
-
-      localStorage.setItem("pending_order", JSON.stringify(cardOrderData));
-
       try {
         const sessionRes = await fetch(`${BACKEND_URL}/api/create-checkout-session`, {
           method: "POST",
@@ -230,34 +229,31 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
   };
 
   const handleDemoCardPaymentSuccess = async () => {
-    if (!pendingFormData) return;
-    try {
-      const newOrder = {
-        id: currentOrderId,
-        restaurant_id: RESTAURANT_ID,
-        table_no: String(pendingFormData.tableNumber),
-        customer_name: String(pendingFormData.customerName),
-        items: cart,
-        total: getTotalPrice().toString(),
-        notes: `Payment: CARD (Paid) | ${pendingFormData.notes || ""}`,
-        payment_status: "cash_received",
-        paymentType: "cash_received",
-        paymentStatus: "cash_received",
-        payment_method: "card",
-        status: "pending",
-      };
+    const rawPending = localStorage.getItem("pending_order");
+    if (!rawPending) return;
+    const pendingOrder = JSON.parse(rawPending);
 
+    try {
       const res = await fetch(`${BACKEND_URL}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newOrder),
+        body: JSON.stringify(pendingOrder),
       });
 
       if (!res.ok) throw new Error("Failed to save card order");
 
+      setSuccessBillData({
+        customerName: pendingOrder.customer_name,
+        tableNumber: pendingOrder.table_no,
+        items: pendingOrder.items,
+        total: pendingOrder.total,
+        paymentType: "card"
+      });
+
       setOrderSuccess(true);
       setShowDemoPayment(false);
       clearCart();
+      localStorage.removeItem("pending_order");
       toast.success("Payment Successful & Order Placed!");
     } catch (e) {
       toast.error("Payment successful but failed to place order on server");
@@ -268,22 +264,24 @@ export function OrderModal({ isOpen, onClose, onSuccess }: OrderModalProps) {
 
   return (
     <>
-      {/* ⚡ Agar order successful ho gaya hai toh alag se SuccessScreen component render hoga with bill props */}
-      <SuccessScreen 
-        isOpen={orderSuccess} 
-        onClose={() => { 
-          setOrderSuccess(false); 
-          onSuccess(); 
-          onClose(); 
-        }} 
-        orderData={{
-          customerName: pendingFormData?.customerName,
-          tableNumber: pendingFormData?.tableNumber,
-          items: cart,
-          total: getTotalPrice(),
-          paymentType: paymentType || "cash"
-        }}
-      />
+      {/* ⚡ SuccessScreen jiska z-index sabse upar hai taaki sabse front me dikhe */}
+      <div className="fixed inset-0 z-[9999]">
+        <SuccessScreen 
+          isOpen={orderSuccess} 
+          onClose={() => { 
+            setOrderSuccess(false); 
+            onSuccess(); 
+            onClose(); 
+          }} 
+          orderData={successBillData || {
+            customerName: pendingFormData?.customerName,
+            tableNumber: pendingFormData?.tableNumber,
+            items: cart,
+            total: getTotalPrice(),
+            paymentType: paymentType || "cash"
+          }}
+        />
+      </div>
 
       <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
         <div className="bg-white text-black p-6 rounded-2xl w-full max-w-md shadow-2xl border">
