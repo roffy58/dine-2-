@@ -8,7 +8,6 @@ import { SearchProvider } from "./contexts/SearchContext";
 import { Header } from "./components/Header";
 import { FloatingOrderButton } from "./components/FloatingOrderButton";
 import { OrderModal } from "./components/OrderModal";
-import { SuccessScreen } from "./components/SuccessScreen";
 import { BackgroundSlideshow } from "./components/BackgroundSlideshow";
 import HomePage from "./pages/HomePage";
 import CategoryPage from "./pages/CategoryPage";
@@ -26,22 +25,12 @@ function Router() {
 
 function App() {
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [isSuccessScreenOpen, setIsSuccessScreenOpen] = useState(false);
-
-  const handleOrderSuccess = () => {
-    setIsSuccessScreenOpen(true);
-  };
-
-  const handleSuccessClose = () => {
-    setIsSuccessScreenOpen(false);
-  };
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <SearchProvider>
           <CartProvider>
-
             <div className="min-h-screen bg-background relative">
               <BackgroundSlideshow />
               <Header />
@@ -52,11 +41,10 @@ function App() {
               <OrderModal
                 isOpen={isOrderModalOpen}
                 onClose={() => setIsOrderModalOpen(false)}
-                onSuccess={handleOrderSuccess}
-              />
-              <SuccessScreen
-                isOpen={isSuccessScreenOpen}
-                onClose={handleSuccessClose}
+                onSuccess={() => {
+                  // Order success hone par bas modal close kar do, success screen modal khud sambhal lega
+                  setIsOrderModalOpen(false);
+                }}
               />
             </div>
             <HotToaster
