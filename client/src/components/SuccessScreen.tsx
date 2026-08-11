@@ -10,7 +10,7 @@ interface SuccessScreenProps {
   onClose: () => void;
   restaurantName?: string;
   orderData?: {
-    Id?: string | number;
+    id?: string | number;
     customerName?: string;
     tableNumber?: string;
     items?: Array<{ name: string; quantity: number; price: number }>;
@@ -63,9 +63,9 @@ export function SuccessScreen({ isOpen, onClose, restaurantName = "Nevolt", orde
           <div ref={billRef} className="bg-white border border-border rounded-lg p-4 text-left text-sm space-y-2 text-foreground">
             <div className="text-center font-bold text-base border-b pb-2 mb-2">{restaurantName.toUpperCase()} - Digital Bill</div>
             
-            {orderData?.orderId && (
+            {orderData?.id && (
               <div className="flex justify-between text-xs text-gray-500 border-b pb-1">
-                <span>Order ID:</span> <span className="font-mono font-medium">{orderData.orderId}</span>
+                <span>ID:</span> <span className="font-mono font-medium">{orderData.id}</span>
               </div>
             )}
 
